@@ -2,3 +2,4 @@
 # global:
 #   hubClusterDomain: hub.example.com
 #   localCluster: local.example.com
+anycastIP: 192.168.155.151
