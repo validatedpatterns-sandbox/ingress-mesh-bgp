@@ -2,3 +2,6 @@
 # global:
 #   hubClusterDomain: hub.example.com
 #   localCluster: local.example.com
+#
+# This needs to be listed in the addresses of the IPAddressPool
+anycastIP: 192.168.155.151

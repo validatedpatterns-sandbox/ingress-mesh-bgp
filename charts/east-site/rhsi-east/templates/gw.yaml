@@ -5,7 +5,9 @@ metadata:
   namespace: default
 spec:
   gatewayClassName: openshift-default
-  loadBalancerIP: 192.168.155.151
+  addresses:
+  - type: IPAddress
+    value: {{ .Values.anycastIP }}
   listeners:
   - name: http
     protocol: HTTP
