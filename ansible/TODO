@@ -1,8 +1,0 @@
-- BFD is certainly broken on the client as it needs to use different local addresses
-
-
-- When deploying ingress pattern you need to tweak route server ips (maybe we can do this dynamically?)
-- Add the routes for the three workers on the spoke on the clients
-- Check BFD with route server
-- Add a test target in ansible that checks things from the client vm
-- Create two separate subnets for the vm client instead of reusing existing ones?
