@@ -1,0 +1,7 @@
+acm_import_clustergroup_label: group-one
+acm_import_ocm_iam_policy_controller: true
+acm_import_ocm_search_controller: true
+acm_import_ocm_policy_controller: true
+acm_import_ocm_cert_policy_controller: true
+acm_import_ocm_application_manager: true
+acm_import_ocm_argo_cd_cluster: false

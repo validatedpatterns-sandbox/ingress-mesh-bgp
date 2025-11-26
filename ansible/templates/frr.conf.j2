@@ -1,0 +1,53 @@
+frr defaults traditional
+log file /var/log/frr/frr.log
+log timestamp precision 3
+!
+debug zebra nht
+debug bgp neighbor-events
+debug bgp nht
+debug bgp updates in
+debug bgp updates out
+{% if metallb_bfd_enable %}
+debug bfd peer
+{% endif -%}
+
+!
+router bgp {{ asn }}
+ timers bgp 3 15
+ no bgp ebgp-requires-policy
+ no bgp default ipv4-unicast
+ no bgp network import-check
+
+{% for group_name, ips in bgp_neighbors.items() %}
+ neighbor {{ group_name }} peer-group
+ neighbor {{ group_name }} remote-as {{ peer_asns[group_name] | default(65000) }}
+{% for ip in ips %}
+ neighbor {{ ip }} peer-group {{ group_name }}
+ neighbor {{ ip }} bfd
+{% endfor %}
+{% endfor %}
+
+ address-family ipv4 unicast
+{% if is_tor | default(false) %}
+    network {{ metallb_address_pool }}
+{% endif %}
+{% for group_name, ips in bgp_neighbors.items() %}
+{% for ip in ips %}
+    neighbor {{ ip }} next-hop-self
+    neighbor {{ ip }} activate
+{% endfor %}
+{% endfor %}
+ exit-address-family
+!
+!
+{% if metallb_bfd_enable %}
+bfd
+{% for group_name, ips in bgp_neighbors.items() %}
+{% for ip in ips %}
+ peer {{ ip }} multihop local-address {{ bfd_localaddresses[group_name][loop.index0] }}
+{% endfor %}
+{% endfor %}
+ exit
+ !
+exit
+{% endif %}

@@ -1,0 +1,3 @@
+- When deploying ingress pattern you need to tweak route server ips (maybe we can do this dynamically?)
+- Add a test target in ansible that checks things from the client vm
+- Add a couple of diagrams and a small readme

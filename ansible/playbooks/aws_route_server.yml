@@ -1,0 +1,106 @@
+- name: Get route server
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 describe-route-servers \
+    --filters Name=tag:Name,Values=test-routeserver-{{ ocp.cluster_name }} \
+    --output json --no-cli-pager
+  register: get_route_server_raw
+
+- name: Create route server if it does not exists
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 create-route-server \
+    --amazon-side-asn {{ metallb_aws_side_asn }} \
+    --tag-specifications ResourceType=route-server,Tags=\[\{Key=Name,Value=test-routeserver-{{ ocp.cluster_name }}\}\] \
+    --output json --no-cli-pager
+  when: get_route_server['RouteServers'] | selectattr('State', 'equalto', 'available') | length == 0
+  vars:
+    get_route_server: "{{ get_route_server_raw.stdout | from_yaml }}"
+
+- name: Get route server
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 describe-route-servers \
+    --filters Name=tag:Name,Values=test-routeserver-{{ ocp.cluster_name }} \
+    --output json --no-cli-pager
+  register: get_route_server_raw
+
+- name: Set the id of the route server
+  ansible.builtin.set_fact:
+    route_server_id: "{{ get_route_server['RouteServers'] | selectattr('State', 'equalto', 'available') | map(attribute='RouteServerId') | first }}"
+  vars:
+    get_route_server: "{{ get_route_server_raw.stdout | from_yaml }}"
+
+- name: Associate route server with vpc
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 associate-route-server \
+    --route-server-id {{ route_server_id }} \
+    --vpc-id {{ sg_vpc_id }}
+
+- name: Get route server endpoint
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 describe-route-server-endpoints \
+    --filters Name=tag:Name,Values=test-routeserver-endpoint-{{ ocp.cluster_name }} \
+    --output json --no-cli-pager
+  register: get_route_server_endpoint_raw
+
+- name: Create route server endpoint in a subnet in the vpc if it does not exists
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 create-route-server-endpoint \
+    --route-server-id {{ route_server_id }} \
+    --subnet-id {{ public_subnet_id }} \
+    --tag-specifications ResourceType=route-server-endpoint,Tags=\[\{Key=Name,Value=test-routeserver-endpoint-{{ ocp.cluster_name }}\}\] \
+    --output json --no-cli-pager
+  when: get_route_server_endpoint['RouteServerEndpoints'] | selectattr('State', 'equalto', 'available') | length == 0
+  vars:
+    get_route_server_endpoint: "{{ get_route_server_endpoint_raw.stdout | from_yaml }}"
+
+- name: Get route server endpoint
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 describe-route-server-endpoints \
+    --filters Name=tag:Name,Values=test-routeserver-endpoint-{{ ocp.cluster_name }} \
+    --output json --no-cli-pager
+  register: get_route_server_endpoint_raw
+  until: get_route_server_endpoint['RouteServerEndpoints'] | selectattr('State', 'equalto', 'available') | length != 0
+  vars:
+    get_route_server_endpoint: "{{ get_route_server_endpoint_raw.stdout | from_yaml }}"
+  retries: 20
+  delay: 10
+
+- name: Print IP address of the route server endpoint
+  ansible.builtin.debug:
+    msg: "IP: {{ aws_route_get_server_endpoint['RouteServerEndpoints'] | selectattr('State', 'equalto', 'available') | map(attribute='EniAddress') | first }}"
+  vars:
+    aws_route_get_server_endpoint: "{{ get_route_server_endpoint_raw.stdout | from_yaml }}"
+
+- name: Set the id of the route server endpoint
+  ansible.builtin.set_fact:
+    rse_id: "{{ aws_route_get_server_endpoint['RouteServerEndpoints'] | selectattr('State', 'equalto', 'available') | map(attribute='RouteServerEndpointId') | first }}"
+  vars:
+    aws_route_get_server_endpoint: "{{ get_route_server_endpoint_raw.stdout | from_yaml }}"
+
+- name: Create route server peers for each worker node
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 create-route-server-peer \
+    --route-server-endpoint-id {{ rse_id }} --peer-address {{ item }} --bgp-options PeerAsn={{ metallb_openshift_side_asn }},PeerLivenessDetection={{ aws_route_server_peer_detection }} \
+    --tag-specifications ResourceType=route-server-peer,Tags=\[\{Key=Name,Value={{ ocp.cluster_name }}-node-{{ item }}\}\] \
+    --output json --no-cli-pager
+  loop: "{{ worker_nodes.stdout_lines }}"
+
+- name: Get route table id-s for vpc
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 describe-route-tables \
+    --filters Name=vpc-id,Values={{ sg_vpc_id }} \
+    --output json --no-cli-pager
+  register: get_route_tables_raw
+
+- name: Set route table id-s for vpc
+  ansible.builtin.set_fact:
+    route_table_ids: "{{ rt['RouteTables'] | map(attribute='RouteTableId') | list }}"
+  vars:
+    rt: "{{ get_route_tables_raw.stdout | from_yaml }}"
+
+- name: Create route server propagation for each worker node subnet
+  ansible.builtin.shell: |
+    aws --profile {{ aws_profile }} --region {{ aws_region }} ec2 enable-route-server-propagation \
+    --route-server-id {{ route_server_id }} \
+    --route-table-id {{ item }} \
+    --output json --no-cli-pager
+  loop: "{{ route_table_ids }}"

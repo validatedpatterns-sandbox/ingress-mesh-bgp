@@ -1,0 +1,18 @@
+#cloud-config
+chpasswd:
+  expire: false
+user: ec2-user
+packages:
+- tmux
+- nc
+- traceroute
+- tcpdump
+- vim
+write_files:
+  - path: /etc/sysctl.d/90-frr-routing.conf
+    content: |
+      net.ipv4.ip_forward = 1
+      net.ipv6.conf.all.forwarding = 1
+
+runcmd:
+  - sysctl --system
