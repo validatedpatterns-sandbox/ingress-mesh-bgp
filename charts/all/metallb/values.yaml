@@ -9,6 +9,6 @@ metallb:
   peerAddress: 10.0.0.0
   ebgpMultiHop: true
   bfd:
-    enabled: false
+    enabled: true
     receiveInterval: 380
     transmitInterval: 270
