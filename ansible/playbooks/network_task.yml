@@ -1,0 +1,105 @@
+# This task assumes that it is invoked with the following loop:
+# loop:
+#   - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}" }
+#   - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}" }
+# loop_control:
+#   loop_var: ocp
+
+
+- name: Get worker node ip list for "{{ ocp.name }}"
+  ansible.builtin.shell: |
+    oc describe nodes -l node-role.kubernetes.io/worker | grep InternalIP: | awk '{ print $2 }'
+  environment:
+    KUBECONFIG: "{{ ocp.config }}"
+  register: worker_nodes
+
+- name: Gather security group info for workers for "{{ ocp.name }}"
+  amazon.aws.ec2_security_group_info:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      "tag:sigs.k8s.io/cluster-api-provider-aws/role": "node"
+      "tag:Name": "{{ ocp.cluster_name }}-*"
+  register: ec2_security_group_info
+
+- name: Debug for "{{ ocp.name }} - {{ ocp.cluster_name }}"
+  ansible.builtin.debug:
+    msg: "ec2_security_group_info: {{ ec2_security_group_info }}"
+
+- name: Set vpc and sg id for "{{ ocp.name }}"
+  ansible.builtin.set_fact:
+    sg_vpc_id: "{{ ec2_security_group_info.security_groups[0].vpc_id }}"
+    sg_group_id: "{{ ec2_security_group_info.security_groups[0].group_id }}"
+    sg_group_name: "{{ ec2_security_group_info.security_groups[0].group_name }}"
+    sg_worker_description: "{{ ec2_security_group_info.security_groups[0].description }}"
+
+- name: Gather vpc subnet info for workers for "{{ ocp.name }}"
+  amazon.aws.ec2_vpc_subnet_info:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ sg_vpc_id }}"
+  register: ec2_vpc_subnet_info
+
+- name: Set public subnet id for "{{ ocp.name }}"
+  ansible.builtin.set_fact: # only add the public subnet, and there will be only exactly one
+    public_subnet_id: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', true) | selectattr('availability_zone', '==', aws_az) | map(attribute='subnet_id') | first }}"
+  vars:
+    aws_az: "{{ aws_region }}a"
+
+- name: Set full var public subnet id for "{{ ocp.name }}"
+  ansible.builtin.set_fact: # only add the public subnet, and there will be only exactly one
+    "{{ ocp.name }}_public_subnet_id": "{{ public_subnet_id }}"
+    "{{ ocp.name }}_vpc_id": "{{ sg_vpc_id }}"
+
+- name: Debug subnet for "{{ ocp.name }}"
+  ansible.builtin.debug:
+    msg: "public_subnet_id: {{ public_subnet_id }} - ec2_vpc_subnet_info: {{ ec2_vpc_subnet_info }}"
+
+- name: Open up worker node security groups
+  amazon.aws.ec2_security_group:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    name: "{{ sg_group_name }}"
+    description: "{{ sg_worker_description }}"
+    rules:
+      - proto: all
+        cidr_ip: 10.0.0.0/8 # TODO: get this from the vpc
+        rule_desc: All port from vpc
+    purge_rules: false
+
+- name: Get NICs for a vpc
+  amazon.aws.ec2_eni_info:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ sg_vpc_id }}"
+      interface-type: interface
+  register: ec2_eni_info
+
+# Modify the each worker node interface to disable source/dest check (needed for the ip address not on the vpc)
+- name: Disable source/dest check on worker node NIC-s
+  amazon.aws.ec2_eni:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    source_dest_check: false
+    eni_id: "{{ item['id'] }}"
+  when: item['private_ip_address'] in worker_nodes.stdout_lines
+  loop: "{{ ec2_eni_info['network_interfaces'] }}"
+
+- name: Create ec2 security group
+  amazon.aws.ec2_security_group:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    name: test-client-{{ ocp.cluster_name }}-security-group
+    description: sec group for test client
+    vpc_id: "{{ sg_vpc_id }}"
+    rules:
+    - proto: all
+      cidr_ip: 10.0.0.0/8 # TODO: get this from the vpc
+      rule_desc: All port from vpc
+    - proto: tcp
+      from_port: 22
+      to_port: 22
+      cidr_ip: 0.0.0.0/0
+      rule_desc: allow ssh access from the internet
