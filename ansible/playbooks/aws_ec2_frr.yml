@@ -116,12 +116,12 @@
       src: ../templates/frr.conf.j2
       dest: /etc/frr/frr.conf
     vars:
-      asn: "{{ metallb_asn }}"
+      asn: "{{ ocp.metallb_asn }}"
       bgp_neighbors:
         metallb: "{{ worker_nodes.stdout_lines }}"
         clientfrr: "{{ [ ocp.frr_client_leg_ip ] }}"
       peer_asns:
-        metallb: "{{ metallb_openshift_side_asn }}"
+        metallb: "{{ ocp.metallb_openshift_asn }}"
         clientfrr: "{{ metallb_client_side_asn }}"
       bfd_localaddresses:
         metallb:
