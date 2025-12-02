@@ -198,8 +198,8 @@
     - name: Create aws frr ec2 infrastructure
       ansible.builtin.include_tasks: aws_ec2_frr.yml
       loop:
-        - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}", frr_client_leg_ip: "{{ client_hub_private_ip }}" }
-        - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}", frr_client_leg_ip: "{{ client_spoke_private_ip }}" }
+        - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}", frr_client_leg_ip: "{{ client_hub_private_ip }}", metallb_asn: "{{ metallb_aws_hub_tor_asn }}" }
+        - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}", frr_client_leg_ip: "{{ client_spoke_private_ip }}", metallb_asn: "{{ metallb_aws_spoke_tor_asn }}" }
       loop_control:
         loop_var: ocp
       when: aws_route_server is false

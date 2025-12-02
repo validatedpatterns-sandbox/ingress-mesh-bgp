@@ -116,7 +116,7 @@
       src: ../templates/frr.conf.j2
       dest: /etc/frr/frr.conf
     vars:
-      asn: "{{ metallb_aws_side_asn }}"
+      asn: "{{ metallb_asn }}"
       bgp_neighbors:
         metallb: "{{ worker_nodes.stdout_lines }}"
         clientfrr: "{{ [ ocp.frr_client_leg_ip ] }}"
