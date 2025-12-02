@@ -22,4 +22,4 @@ aws_route_server_peer_detection: "{{ 'bfd' if metallb_bfd_enable else 'bgp-keepa
 
 aws_ec2_instance_type: t2.micro   # This will be used for both the client ec2 and the frr ec2
 
-clustergroup_label: group-one
+acm_import_clustergroup_label: group-one

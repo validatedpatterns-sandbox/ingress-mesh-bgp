@@ -2,25 +2,25 @@
 apiVersion: agent.open-cluster-management.io/v1
 kind: KlusterletAddonConfig
 metadata:
-  name: {{ region_cluster_name }}
-  namespace: {{ region_cluster_name }}
+  name: {{ acm_import_region_cluster_name }}
+  namespace: {{ acm_import_region_cluster_name }}
 spec:
-  clusterName: {{ region_cluster_name }}
-  clusterNamespace: {{ region_cluster_name }}
+  clusterName: {{ acm_import_region_cluster_name }}
+  clusterNamespace: {{ acm_import_region_cluster_name }}
   clusterLabels:
     cloud: auto-detect
-    name: {{ region_cluster_name }}
+    name: {{ acm_import_region_cluster_name }}
     vendor: auto-detect
-    clusterGroup: {{ clustergroup_label }}
+    clusterGroup: {{ acm_import_clustergroup_label }}
   iamPolicyController:
-    enabled: {{ ocm_iam_policy_controller }}
+    enabled: {{ acm_import_ocm_iam_policy_controller }}
   searchCollector:
-    enabled: {{ ocm_search_controller }}
+    enabled: {{ acm_import_ocm_search_controller }}
   policyController:
-    enabled: {{ ocm_policy_controller }}
+    enabled: {{ acm_import_ocm_policy_controller }}
   certPolicyController:
-    enabled: {{ ocm_cert_policy_controller }}
+    enabled: {{ acm_import_ocm_cert_policy_controller }}
   applicationManager:
-    enabled: {{ ocm_application_manager }}
-    argocdCluster: {{ ocm_argo_cd_cluster }}
+    enabled: {{ acm_import_ocm_application_manager }}
+    argocdCluster: {{ acm_import_ocm_argo_cd_cluster }}
 ...

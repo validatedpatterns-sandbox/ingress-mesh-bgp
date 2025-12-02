@@ -2,12 +2,12 @@
 apiVersion: cluster.open-cluster-management.io/v1
 kind: ManagedCluster
 metadata:
-  name: {{ region_cluster_name }}
+  name: {{ acm_import_region_cluster_name }}
   labels:
-    name: {{ region_cluster_name }}
+    name: {{ acm_import_region_cluster_name }}
     vendor: auto-detect
     cloud: auto-detect
-    clusterGroup: {{ clustergroup_label }}
+    clusterGroup: {{ acm_import_clustergroup_label }}
 spec:
   hubAcceptsClient: true
   leaseDurationSeconds: 60
