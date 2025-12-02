@@ -246,15 +246,18 @@
           vars:
             asn: "{{ metallb_client_side_asn }}"
             bgp_neighbors:
-              tor:
+              hub:
                 - "{{ hub_frr_private_ip }}"
+              spoke:
                 - "{{ spoke_frr_private_ip }}"
             bfd_localaddresses:
-              tor:
+              hub:
                 - "{{ client_hub_private_ip }}"
+              spoke:
                 - "{{ client_spoke_private_ip }}"
             peer_asns:
-              tor: "{{ metallb_aws_side_asn }}"
+              hub: "{{ metallb_aws_hub_tor_asn }}"
+              spoke: "{{ metallb_aws_spoke_tor_asn }}"
             is_tor: false
 
         - name: Create frr daemons config on client {{ fqdn_nodot }}
