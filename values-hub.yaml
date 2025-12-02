@@ -64,6 +64,10 @@ clusterGroup:
       argoProject: hub
       path: charts/all/metallb
       overrides:
+      - name: metallb.myASN
+        value: 65001
+      - name: metallb.peerASN
+        value: 64001
       - name: metallb.peerAddress
         value: 10.0.101.167
     rhsi:

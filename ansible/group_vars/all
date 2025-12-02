@@ -9,9 +9,10 @@ ssh_pubkey: "{{ lookup('file', '~/.ssh/id_rsa.pub' | expanduser) }}"
 
 hosted_zone: aws.validatedpatterns.io.
 
-metallb_aws_hub_tor_asn: 64512
-metallb_aws_spoke_tor_asn: 64513
-metallb_openshift_side_asn: 65001 # This is needed for the bgp peering on both side (aws infra and ocp cluster)
+metallb_aws_hub_tor_asn: 64001
+metallb_aws_spoke_tor_asn: 64002
+metallb_openshift_hub_asn: 65001
+metallb_openshift_spoke_asn: 65002
 metallb_client_side_asn: 64666
 metallb_address_pool: 192.168.155.0/24
 metallb_bfd_enable: false         # Change to true to enable bgo+bfd
