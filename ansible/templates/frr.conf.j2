@@ -11,12 +11,15 @@ debug bgp updates out
 debug bfd peer
 {% endif -%}
 
+ip prefix-list ACCEPT_LAB seq 5 permit {{ metallb_address_pool }} le 32
+
 !
 router bgp {{ asn }}
  timers bgp 3 15
  no bgp ebgp-requires-policy
  no bgp default ipv4-unicast
  no bgp network import-check
+ bgp bestpath as-path multipath-relax
 
 {% for group_name, ips in bgp_neighbors.items() %}
  neighbor {{ group_name }} peer-group
@@ -34,11 +37,17 @@ router bgp {{ asn }}
 {% for group_name, ips in bgp_neighbors.items() %}
 {% for ip in ips %}
     neighbor {{ ip }} next-hop-self
+    neighbor {{ ip }} soft-reconfiguration inbound
     neighbor {{ ip }} activate
+    neighbor {{ ip }} route-map ACCEPT_LAB in
 {% endfor %}
 {% endfor %}
+  maximum-paths 4
  exit-address-family
 !
+route-map ACCEPT_LAB permit 10
+  match ip address prefix-list ACCEPT_LAB
+exit
 !
 {% if metallb_bfd_enable %}
 bfd
