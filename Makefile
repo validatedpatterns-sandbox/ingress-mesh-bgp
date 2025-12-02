@@ -8,7 +8,7 @@ endif
 .PHONY: default
 default: help
 
-## @AWS Infrastructure tasks
+##@ AWS Infrastructure tasks
 .PHONY: bgp-routing
 bgp-routing: ## Sets up the BGP routing with a client ec2 in aws
 	cd ansible && ansible-playbook -i hosts $(EXTRA_ARGS) $(EXTRA_VARS) playbooks/router.yml
