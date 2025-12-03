@@ -61,5 +61,5 @@
             'vpc_id': vpc_result.vpc.id,
             'subnet_id': subnet_result.subnet.id
           })
-        })
+        }, recursive=True)
       }}
