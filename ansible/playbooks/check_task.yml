@@ -1,6 +1,6 @@
 # Checks that env variables are set, that clusters are reachable
 # Sets aws_region and {hub,spoke}_cluster_name and {hub,spoke}_fqdn facts
-# Also sets aws_arn_userid and test_client_ec2_ssh_key_name
+# Also sets aws_arn_userid and ec2_ssh_key_name
 
 - name: Get AWS caller identity for Owner tag
   amazon.aws.aws_caller_info:
@@ -13,28 +13,28 @@
 
 - name: Set AWS ec2 ssh key name
   ansible.builtin.set_fact:
-    test_client_ec2_ssh_key_name: "{{ aws_arn_userid }}-ssh-key-rsa"
+    ec2_ssh_key_name: "{{ aws_arn_userid }}-ssh-key-rsa"
 
-- name: Set HUBCONFIG and SPOKECONFIG facts from env variables
+- name: Set WESTCONFIG and EASTCONFIG facts from env variables
   ansible.builtin.set_fact:
-    HUBCONFIG: "{{ lookup('env', 'HUBCONFIG') }}"
-    SPOKECONFIG: "{{ lookup('env', 'SPOKECONFIG') }}"
+    WESTCONFIG: "{{ lookup('env', 'WESTCONFIG') }}"
+    EASTCONFIG: "{{ lookup('env', 'EASTCONFIG') }}"
 
-- name: Check for correct HUBCONFIG variable
+- name: Check for correct WESTCONFIG variables
   ansible.builtin.fail:
-    msg: "HUBCONFIG variable needs to be set and pointing to the HUB kubeconfig file"
+    msg: "WESTCONFIG variable needs to be set and pointing to the WEST cluster (with ACM) kubeconfig file"
   when:
-    HUBCONFIG is not defined or HUBCONFIG | length == 0
+    WESTCONFIG is not defined or WESTCONFIG | length == 0
 
-- name: Check for correct SPOKECONFIG env variable
+- name: Check for correct EASTCONFIG env variable
   ansible.builtin.fail:
-    msg: "SPOKECONFIG variable needs to be set and pointing to the REGION kubeconfig file"
+    msg: "EASTCONFIG variable needs to be set and pointing to the EAST cluster (without ACM) kubeconfig file"
   when:
-    SPOKECONFIG is not defined or SPOKECONFIG | length == 0
+    EASTCONFIG is not defined or EASTCONFIG | length == 0
 
 - name: Show the two cluster kubeconfig paths
   ansible.builtin.debug:
-    msg: "HUBCONFIG: {{ HUBCONFIG }} - SPOKECONFIG: {{ SPOKECONFIG }}"
+    msg: "WESTCONFIG: {{ WESTCONFIG }} - EASTCONFIG: {{ EASTCONFIG }}"
 
 - name: Check that both clusters are reachable
   ansible.builtin.shell: |
@@ -42,8 +42,8 @@
   environment:
     KUBECONFIG: "{{ item }}"
   loop:
-    - "{{ HUBCONFIG }}"
-    - "{{ SPOKECONFIG }}"
+    - "{{ WESTCONFIG }}"
+    - "{{ EASTCONFIG }}"
 
 - name: Get cluster routes and set facts
   ansible.builtin.shell: |
@@ -52,10 +52,10 @@
     KUBECONFIG: "{{ item.config }}"
   register: route_result
   loop:
-    - { name: "hub", config: "{{ HUBCONFIG }}" }
-    - { name: "spoke", config: "{{ SPOKECONFIG }}" }
+    - { name: "west", config: "{{ WESTCONFIG }}" }
+    - { name: "east", config: "{{ EASTCONFIG }}" }
 
-- name: Set cluster route info dynamically
+- name: Set cluster routes info dynamically
   ansible.builtin.set_fact:
     "{{ item.item.name }}_cluster_name": "{{ (item.stdout | split('.'))[1] }}"
     "{{ item.item.name }}_fqdn": "{{ (item.stdout | split('.'))[1:] | join('.') }}"
@@ -68,33 +68,28 @@
     KUBECONFIG: "{{ item.config }}"
   register: aws_region_result
   loop:
-    - { name: "hub", config: "{{ HUBCONFIG }}" }
-    - { name: "spoke", config: "{{ SPOKECONFIG }}" }
+    - { name: "west", config: "{{ WESTCONFIG }}" }
+    - { name: "east", config: "{{ EASTCONFIG }}" }
 
 - name: Set cluster aws region info dynamically
   ansible.builtin.set_fact:
     "{{ item.item.name }}_aws_region": "{{ item.stdout }}"
   loop: "{{ aws_region_result.results }}"        
 
-- name: Check if clusters are in different regions
-  ansible.builtin.debug:
-    msg: "WARNING: Hub cluster is in {{ hub_aws_region }}, spoke cluster is in {{ spoke_aws_region }}. Multi-region support is experimental."
-  when: hub_aws_region != spoke_aws_region
-
 - name: Validate clusters are in the same region (unless explicitly overridden)
   ansible.builtin.assert:
     that:
-      - hub_aws_region == spoke_aws_region or allow_different_regions | default(false)
+      - west_aws_region == east_aws_region or allow_different_regions | default(false)
     fail_msg: |
-      FATAL: Clusters are in different regions (hub: {{ hub_aws_region }}, spoke: {{ spoke_aws_region }}).
+      FATAL: Clusters are in different regions (west: {{ west_aws_region }}, east: {{ east_aws_region }}).
       Multi-region support is not fully implemented.
       If you want to proceed anyway, set 'allow_different_regions: true' in your overrides.yml file.
       WARNING: This may result in connectivity issues or deployment failures.
 
 - name: Set aws region
   ansible.builtin.set_fact:
-    aws_region: "{{ hub_aws_region }}"
+    aws_region: "{{ west_aws_region }}"
 
 - name: Print AWS infos
   ansible.builtin.debug:
-    msg: "AWS User: {{ aws_arn_userid }} - AWS Profile: {{ aws_profile }}"
+    msg: "AWS User: {{ aws_arn_userid }} - AWS Profile: {{ aws_profile }} - AWS Region: {{ aws_region }}"

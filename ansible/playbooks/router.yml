@@ -13,30 +13,14 @@
     - name: Checks
       ansible.builtin.include_tasks: check_task.yml
 
-    - name: Get ami image
-      ansible.builtin.shell: |
-        aws --profile {{ aws_profile }} ec2 describe-images \
-        --owners {{ aws_ami_owner }} \
-        --filters "Name=name,Values={{ aws_ami_name }}*" "Name=state,Values=available" "Name=architecture,Values={{ aws_ami_arch }}" \
-        --region {{ aws_region }} \
-        --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
-        --output text
-      register: test_client_ec2_ami_image_id_raw
-      changed_when: false
-
-    - name: Set ami image fact
-      ansible.builtin.set_fact:
-        test_client_ec2_ami_image_id: "{{ test_client_ec2_ami_image_id_raw.stdout }}"
-
-    - name: Print ami image use
-      ansible.builtin.debug:
-        msg: "Using AMI image: {{ test_client_ec2_ami_image_id }}"
+    - name: Fetch AMI id
+      ansible.builtin.include_tasks: get_ami.yml
 
     - name: Create key pair to access ec2 with ssh
       amazon.aws.ec2_key:
         profile: "{{ aws_profile }}"
         region: "{{ aws_region }}"
-        name: "{{ test_client_ec2_ssh_key_name }}"
+        name: "{{ ec2_ssh_key_name }}"
         key_material: "{{ ssh_pubkey }}"
 
     - name: Configure networking for hub and spoke clusters
