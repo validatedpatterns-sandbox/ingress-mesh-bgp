@@ -13,7 +13,7 @@
     - name: Checks
       ansible.builtin.include_tasks: check_task.yml
 
-    - name: Fetch AMI id
+    - name: Fetch AMI id and set ec2_ami_image_id
       ansible.builtin.include_tasks: get_ami.yml
 
     - name: Create key pair to access ec2 with ssh
@@ -22,6 +22,24 @@
         region: "{{ aws_region }}"
         name: "{{ ec2_ssh_key_name }}"
         key_material: "{{ ssh_pubkey }}"
+
+    - name: Set tags to use in every object
+      ansible.builtin.set_fact:
+        current_tags: "{{ aws_default_tags | combine({ 'washere': aws_arn_userid }) }}"
+
+    - name: Create all the VPCs, subnets and EC2 instances
+      ansible.builtin.include_tasks: create_vpc.yml
+      loop: "{{ ec2_vpcs | dict2items }}"
+      loop_control:
+        loop_var: instance
+        label: "{{ instance.key }}"
+
+    - name: debug
+      ansible.builtin.debug:
+        msg: "{{ ec2_vpcs }}"
+
+    - ansible.builtin.fail:
+        msg: "STOP"
 
     - name: Configure networking for hub and spoke clusters
       ansible.builtin.include_tasks: network_task.yml

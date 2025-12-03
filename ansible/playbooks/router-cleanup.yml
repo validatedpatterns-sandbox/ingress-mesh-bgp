@@ -17,6 +17,17 @@
         region: "{{ aws_region }}"
         name: "{{ test_client_ec2_ssh_key_name }}"
         state: absent
+
+    - name: Delete all VPCs
+      ansible.builtin.include_tasks: delete_vpc.yml
+      loop: "{{ ec2_vpcs | dict2items }}"
+      loop_control:
+        loop_var: instance
+        label: "{{ instance.key }}"
+
+    - ansible.builtin.fail:
+        msg: "STOP"
+
     - name: Gather the ec2 instance details
       amazon.aws.ec2_instance_info:
         profile: "{{ aws_profile }}"
