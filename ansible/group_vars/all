@@ -6,6 +6,7 @@ aws_ami_name: "RHEL-10*"
 aws_ami_arch: "x86_64"
 
 ssh_pubkey: "{{ lookup('file', '~/.ssh/id_rsa.pub' | expanduser) }}"
+wait_for_ssh_timeout: 600
 
 hosted_zone: aws.validatedpatterns.io.
 

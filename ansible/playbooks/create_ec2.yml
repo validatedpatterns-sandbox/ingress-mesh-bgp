@@ -1,48 +1,4 @@
-- name: Create VPC
-  amazon.aws.ec2_vpc_net:
-    name: "{{ instance.key }}-vpc"
-    cidr_block: "{{ instance.value.cidr }}"
-    tags: "{{ current_tags }}"
-    region: "{{ aws_region }}"
-    profile: "{{ aws_profile }}"
-  register: vpc_result
-
-- name: Create Internet Gateway
-  amazon.aws.ec2_vpc_igw:
-    vpc_id: "{{ vpc_result.vpc.id }}"
-    tags: "{{ current_tags }}"
-    region: "{{ aws_region }}"
-    profile: "{{ aws_profile }}"
-
-- name: Create Subnet
-  amazon.aws.ec2_vpc_subnet:
-    vpc_id: "{{ vpc_result.vpc.id }}"
-    cidr: "{{ instance.value.subnet_cidr }}"
-    map_public: true
-    tags: "{{ current_tags }}"
-    region: "{{ aws_region }}"
-    profile: "{{ aws_profile }}"
-  register: subnet_result
-
-- name: Create Security Group
-  amazon.aws.ec2_security_group:
-    name: "{{ instance.name }}-sg"
-    description: "Allow SSH"
-    vpc_id: "{{ vpc_result.vpc.id }}"
-    rules:
-      - proto: tcp
-        ports: 22
-        cidr_ip: 0.0.0.0/0
-    tags: "{{ current_tags }}"
-    region: "{{ aws_region }}"
-    profile: "{{ aws_profile }}"
-  register: sg_result
-
-- name: Set facts
-  ansible.builtin.set_fact:
-    "ec2_vpcs.{{ instance.key }}.vpc_id": "{{ vpc_result.vpc.id }}"
-
-- name: Launch EC2 Instance
+- name: Launch EC2 Instance {{ instance.key }}-vm
   amazon.aws.ec2_instance:
     name: "{{ instance.key }}-vm"
     instance_type: "{{ instance.value.instance_type }}"
@@ -50,12 +6,33 @@
     key_name: "{{ ec2_ssh_key_name }}"
     user_data: "{{ lookup('template', '../templates/cloud_init_userdata.j2') | b64encode }}"
     vpc_subnet_id: "{{ subnet_results.subnet.id }}"
-    security_group: "{{ sg_result.group_id }}"
+    security_group: "{{ ec2_vpc[instance.value.vpc].subnet_id }}"
     source_dest_check: false
     network:
       assign_public_ip: true
     state: started
     wait: true
-    tags: "{{ current_tags }}"
+    tags: "{{ current_tags | combine({ 'Name': instance.key + '-vm' }) }}"
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
+  register: ec2_info
+
+- name: Extend ec2_vms instance facts for {{ instance.key }}-vm
+  ansible.builtin.set_fact:
+    ec2_vms: >-
+      {{
+        ec2_vms | combine({
+          instance.key: instance.value | combine({
+            'public_ip': ec2_info_info.instances[0].public_ip_address,
+            'private_ip': ec2_info_info.instances[0].private_ip_address,
+            'instance_id': ec2_info_info.instances[0].instance_id 
+          })
+        }, recursive=True)
+      }}
+
+- name: Wait for SSH to be available
+  ansible.builtin.wait_for:
+    host: "{{ ec2_vms[instance.key].client_public_ip }}"
+    port: 22
+    timeout: "{{ wait_for_ssh_timeout }}"
+    state: started

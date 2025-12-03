@@ -3,8 +3,6 @@
   hosts: localhost
   gather_facts: false
   become: false
-  vars:
-    wait_for_ssh_timeout: 600
   vars_files:
     # Use this to override stuff that won't be committed to git
     - ../overrides.yml
@@ -27,16 +25,23 @@
       ansible.builtin.set_fact:
         current_tags: "{{ aws_default_tags | combine({ 'washere': aws_arn_userid }) }}"
 
-    - name: Create all the VPCs, subnets and EC2 instances
+    - name: Create all the VPCs, subnets, igw and rtbls
       ansible.builtin.include_tasks: create_vpc.yml
       loop: "{{ ec2_vpcs | dict2items }}"
       loop_control:
         loop_var: instance
         label: "{{ instance.key }}"
 
-    - name: debug
+    - name: debug vpcs
       ansible.builtin.debug:
         msg: "{{ ec2_vpcs }}"
+
+    - name: Create all the EC2 instances
+      ansible.builtin.include_tasks: create_ec2.yml
+      loop: "{{ ec2_vms | dict2items }}"
+      loop_control:
+        loop_var: instance
+        label: "{{ instance.key }}"
 
     - ansible.builtin.fail:
         msg: "STOP"
