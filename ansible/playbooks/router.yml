@@ -32,7 +32,7 @@
         loop_var: instance
         label: "{{ instance.key }}"
 
-    - name: debug vpcs
+    - name: Print VPCs
       ansible.builtin.debug:
         msg: "{{ ec2_vpcs }}"
 
@@ -43,7 +43,7 @@
         loop_var: instance
         label: "{{ instance.key }}"
 
-    - name: debug vms
+    - name: Print EC2 VMs
       ansible.builtin.debug:
         msg: "{{ ec2_vms }}"
 
@@ -58,79 +58,6 @@
       loop_control:
         loop_var: ocp
 
-    - name: Start an ec2 instance (test-client)
-      amazon.aws.ec2_instance:
-        profile: "{{ aws_profile }}"
-        region: "{{ aws_region }}"
-        name: "test-client-{{ hub_cluster_name }}"
-        state: started
-        wait: true
-        vpc_subnet_id: "{{ hub_public_subnet_id }}"
-        instance_type: "{{ aws_ec2_instance_type }}"
-        key_name: "{{ test_client_ec2_ssh_key_name }}"
-        source_dest_check: false
-        security_groups: "test-client-{{ hub_cluster_name }}-security-group"
-        image_id: "{{ test_client_ec2_ami_image_id }}"
-        network:
-          assign_public_ip: true
-        user_data: "{{ lookup('template', '../templates/cloud_init_userdata.j2') | b64encode }}"
-      register: client_instance_info
-
-    - name: Set instance facts
-      ansible.builtin.set_fact:
-        client_public_ip: "{{ client_instance_info.instances[0].public_ip_address }}"
-        client_private_ip: "{{ client_instance_info.instances[0].private_ip_address }}"
-        metallb_private_ip: "{{ client_instance_info.instances[0].private_ip_address }}"
-        client_instance_id: "{{ client_instance_info.instances[0].instance_id }}"
-
-    - name: Show instance details
-      ansible.builtin.debug:
-        msg:
-          public_ip: "{{ client_public_ip }}"
-          private_ip: "{{ client_private_ip }}"
-          instance_id: "{{ client_instance_id }}"
-          spoke_public_subnet_id: "{{ spoke_public_subnet_id }}"
-
-    - name: Set dns facts (1)
-      ansible.builtin.set_fact:
-        record_name: "bgp_{{ aws_arn_userid }}"
-
-    - name: Set dns facts (2)
-      ansible.builtin.set_fact:
-        fqdn: "{{ record_name }}.{{ hosted_zone | regex_replace('\n$','') }}"
-        fqdn_nodot: "{{ record_name }}.{{ hosted_zone | regex_replace('\n$','') | regex_replace('\\.$','') }}"
-
-    - name: Create/Update A record
-      amazon.aws.route53:
-        profile: "{{ aws_profile }}"
-        zone: "{{ hosted_zone }}"
-        record: "{{ fqdn }}"
-        type: A
-        ttl: 60
-        value: "{{ client_public_ip }}"
-        overwrite: true
-        state: present
-      register: r53
-
-    - name: Show DNS
-      ansible.builtin.debug:
-        msg:
-          fqdn: "{{ fqdn }}"
-          r53: "{{ r53 }}"
-
-    - name: Wait for SSH to be available
-      ansible.builtin.wait_for:
-        host: "{{ client_public_ip }}"
-        port: 22
-        timeout: "{{ wait_for_ssh_timeout }}"
-        state: started
-
-    - name: Add new host to in-memory inventory
-      ansible.builtin.add_host:
-        name: "{{ fqdn_nodot }}"
-        ansible_host: "{{ client_public_ip }}"
-        groups: ["client_node"]
-        ansible_user: ec2-user
 
     - name: Get ENI in spoke's vpc subnet
       amazon.aws.ec2_eni_info:
