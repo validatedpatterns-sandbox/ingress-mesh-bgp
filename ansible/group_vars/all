@@ -15,7 +15,7 @@ metallb_openshift_hub_asn: 65001
 metallb_openshift_spoke_asn: 65002
 metallb_client_side_asn: 64666
 metallb_address_pool: 192.168.155.0/24
-metallb_bfd_enable: false         # Change to true to enable bgo+bfd
+metallb_bfd_enable: true
 
 
 # This needs to be t2.small (as opposed to t2.micro) so we can have 3 nics (needed for the core)
