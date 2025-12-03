@@ -9,6 +9,8 @@ ssh_pubkey: "{{ lookup('file', '~/.ssh/id_rsa.pub' | expanduser) }}"
 
 hosted_zone: aws.validatedpatterns.io.
 
+acm_import_clustergroup_label: group-one
+
 metallb_aws_hub_tor_asn: 64001
 metallb_aws_spoke_tor_asn: 64002
 metallb_openshift_hub_asn: 65001
@@ -17,8 +19,27 @@ metallb_client_side_asn: 64666
 metallb_address_pool: 192.168.155.0/24
 metallb_bfd_enable: true
 
+ec2_vms:
+  client:
+    # 192.168.8.1 - 192.168.11.254
+    cidr: "192.168.8.0/22"
+    subnet_cidr: "192.168.8.0/24"
+    type: t2.micro
 
-# This needs to be t2.small (as opposed to t2.micro) so we can have 3 nics (needed for the core)
-aws_ec2_instance_type: t2.small
+  core:
+    # 192.168.12.1 - 192.168.15.254
+    cidr: "192.168.12.0/22"
+    subnet_cidr: "192.168.12.0/24"
+    type: t2.small
 
-acm_import_clustergroup_label: group-one
+  west-tor:
+    # 192.168.16.1 - 192.168.19.254
+    cidr: "192.168.16.0/22"
+    subnet_cidr: "192.168.16.0/24"
+    type: t2.micro
+
+  east-tor:
+    # 192.168.20.1 - 192.168.23.254
+    cidr: "192.168.20.0/22"
+    subnet_cidr: "192.168.20.0/24"
+    type: t2.micro
