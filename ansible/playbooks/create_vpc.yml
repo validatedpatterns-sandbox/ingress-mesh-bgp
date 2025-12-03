@@ -24,6 +24,18 @@
     profile: "{{ aws_profile }}"
   register: subnet_result
 
+- name: Create and Associate Route Table {{ instance.key }}-rtbl
+  amazon.aws.ec2_vpc_route_table:
+    vpc_id: "{{ vpc_result.vpc.id }}"
+    subnets:
+      - "{{ subnet_result.subnet.id }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ instance.key }}-igw"
+    tags: "{{ current_tags | combine({ 'Name': instance.key + '-rtbl' }) }}"
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+
 - name: Create Security Group {{ instance.key }}-sg
   amazon.aws.ec2_security_group:
     name: "{{ instance.key }}-sg"
