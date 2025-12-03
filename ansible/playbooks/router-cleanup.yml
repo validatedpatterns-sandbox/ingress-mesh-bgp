@@ -15,7 +15,7 @@
       amazon.aws.ec2_key:
         profile: "{{ aws_profile }}"
         region: "{{ aws_region }}"
-        name: "{{ test_client_ec2_ssh_key_name }}"
+        name: "{{ ec2_ssh_key_name }}"
         state: absent
 
     - name: Delete all VPCs
