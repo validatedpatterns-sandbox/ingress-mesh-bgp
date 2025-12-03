@@ -23,7 +23,7 @@ aws_default_tags:
   pattern: ingress
 
 ec2_vpcs:
-  clientcore:
+  coreclient:
     # 192.168.8.1 - 192.168.11.254
     cidr: "192.168.8.0/22"
     subnet_cidr: "192.168.8.0/24"
@@ -40,12 +40,12 @@ ec2_vpcs:
 
 ec2_vms:
   client:
-    vpc: clientcore
+    vpc: coreclient
     private_ip: 192.168.8.10
     type: t2.micro
 
   core:
-    vpc: clientcore
+    vpc: coreclient
     private_ip: 192.168.8.100
     type: t2.small
 

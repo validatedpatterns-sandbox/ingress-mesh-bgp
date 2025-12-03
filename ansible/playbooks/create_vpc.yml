@@ -1,4 +1,4 @@
-- name: Create VPC
+- name: Create VPC {{ instance.key }}-vpc
   amazon.aws.ec2_vpc_net:
     name: "{{ instance.key }}-vpc"
     cidr_block: "{{ instance.value.cidr }}"
@@ -7,14 +7,14 @@
     profile: "{{ aws_profile }}"
   register: vpc_result
 
-- name: Create Internet Gateway
+- name: Create Internet Gateway {{ instance.key }}-igw
   amazon.aws.ec2_vpc_igw:
     vpc_id: "{{ vpc_result.vpc.id }}"
     tags: "{{ current_tags | combine({ 'Name': instance.key + '-igw' }) }}"
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
 
-- name: Create Subnet
+- name: Create Subnet {{ instance.key }}-net
   amazon.aws.ec2_vpc_subnet:
     vpc_id: "{{ vpc_result.vpc.id }}"
     cidr: "{{ instance.value.subnet_cidr }}"
@@ -24,7 +24,7 @@
     profile: "{{ aws_profile }}"
   register: subnet_result
 
-- name: Create Security Group
+- name: Create Security Group {{ instance.key }}-sg
   amazon.aws.ec2_security_group:
     name: "{{ instance.key }}-sg"
     description: "Allow SSH"
@@ -33,7 +33,7 @@
       - proto: tcp
         ports: 22
         cidr_ip: 0.0.0.0/0
-    tags: "{{ current_tags combine({ 'Name': instance.key + '-sg' }) }}"
+    tags: "{{ current_tags | combine({ 'Name': instance.key + '-sg' }) }}"
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
   register: sg_result
