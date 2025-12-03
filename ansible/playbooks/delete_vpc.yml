@@ -37,10 +37,6 @@
     profile: "{{ aws_profile }}"
   register: sg_info
 
-- name: Debug 2
-  ansible.builtin.debug: 
-    msg: "{{ sg_info }}"
-
 - name: Delete Security Groups
   amazon.aws.ec2_security_group:
     state: absent
@@ -52,70 +48,68 @@
     label: "{{ item.group_id }}"
   when: sg_info.security_groups | length > 0
 
-- name: Find existing subnets 
+- name: Find existing subnets called {{ instance.key }}-net
   amazon.aws.ec2_vpc_subnet_info:
+    filters:
+      "tag:Name": "{{ instance.key }}-net"
+      "tag:washere": "{{ aws_arn_userid }}"
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+  register: subnet_info
+
+- name: Debug 2
+  ansible.builtin.debug: 
+    msg: "{{ subnet_info }}"
+
+- name: Delete Subnets 
+  amazon.aws.ec2_vpc_subnet:
     state: absent
-    vpc_id: "{{ vpc_info.results[index].vpcs[0].id }}"
-    cidr: "{{ item.subnet_cidr }}"
-    region: "{{ item.region }}"
-  loop: "{{ vpc_stack }}"
+    cidr: "{{ item.cidr_block }}"
+    vpc_id: "{{ item.vpc_id }}"
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+  loop: "{{ subnet_info.subnets }}"
   loop_control:
-    index_var: index
-  when: vpc_info.results[index].vpcs | length > 0
+    label: "{{ item.cidr_block }}"
+  when: subnet_info.subnets | length > 0
 
-- ansible.builtin.fail:
-    msg: "STOP here now"
+- name: Find Route Tables called {{ instance.key }}-rtbl
+  amazon.aws.ec2_vpc_route_table_info:
+    filters:
+      "tag:Name": "{{ instance.key }}-rtbl"
+      "tag:washere": "{{ aws_arn_userid }}"
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+  register: rtbl_info
 
-# - name: Delete Subnets
-#   amazon.aws.ec2_vpc_subnet:
-#     state: absent
-#     vpc_id: "{{ vpc_info.results[index].vpcs[0].id }}"
-#     cidr: "{{ item.subnet_cidr }}"
-#     region: "{{ item.region }}"
-#   loop: "{{ vpc_stack }}"
-#   loop_control:
-#     index_var: index
-#   when: vpc_info.results[index].vpcs | length > 0
-#
-# # ---------------------------------------------------------
-# # 6. DELETE ROUTE TABLES & IGW
-# # ---------------------------------------------------------
-# - name: Find Route Tables
-#   amazon.aws.ec2_route_table_info:
-#     region: "{{ item.region }}"
-#     filters:
-#       "tag:Name": "{{ item.name }}-RT"
-#   loop: "{{ vpc_stack }}"
-#   register: rt_info
-#
-# - name: Delete Route Tables
-#   amazon.aws.ec2_vpc_route_table:
-#     state: absent
-#     route_table_id: "{{ rt_info.results[index].route_tables[0].route_table_id }}"
-#     region: "{{ item.region }}"
-#     lookup: id
-#   loop: "{{ vpc_stack }}"
-#   loop_control:
-#     index_var: index
-#   when: rt_info.results[index].route_tables | length > 0
-#
-# - name: Delete Internet Gateway
-#   amazon.aws.ec2_vpc_igw:
-#     state: absent
-#     vpc_id: "{{ vpc_info.results[index].vpcs[0].id }}"
-#     region: "{{ item.region }}"
-#   loop: "{{ vpc_stack }}"
-#   loop_control:
-#     index_var: index
-#   when: vpc_info.results[index].vpcs | length > 0
-#
-# # ---------------------------------------------------------
-# # 7. DELETE VPC
-# # ---------------------------------------------------------
-# - name: Delete VPC
-#   amazon.aws.ec2_vpc_net:
-#     state: absent
-#     name: "{{ item.name }}-VPC"
-#     cidr_block: "{{ item.cidr }}"
-#     region: "{{ item.region }}"
-#   loop: "{{ vpc_stack }}"
+- name: Debug 3
+  ansible.builtin.debug: 
+    msg: "{{ rtbl_info }}"
+
+- name: Delete Route Tables
+  amazon.aws.ec2_vpc_route_table:
+    state: absent
+    route_table_id: "{{ item.route_table_id }}"
+    lookup: id
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+  loop: "{{ rtbl_info.route_tables }}"
+  loop_control:
+    label: "{{ item.route_table_id }}"
+  when: rtbl_info.route_tables | length > 0
+
+- name: Delete Internet Gateway for vpc {{ instance.key }}
+  amazon.aws.ec2_vpc_igw:
+    state: absent
+    vpc_id: "{{ vpc_info.vpcs[0].vpc_id }}"
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+  when: vpc_info.vpcs | length > 0
+
+- name: Delete VPC {{ instance.key }}
+  amazon.aws.ec2_vpc_net:
+    state: absent
+    vpc_id: "{{ vpc_info.vpcs[0].vpc_id }}"
+    cidr_block: "{{ instance.value.cidr }}"
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
