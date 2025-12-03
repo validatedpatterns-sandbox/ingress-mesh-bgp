@@ -13,6 +13,7 @@
     tags: "{{ current_tags | combine({ 'Name': instance.key + '-igw' }) }}"
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
+  register: igw_result
 
 - name: Create Subnet {{ instance.key }}-net
   amazon.aws.ec2_vpc_subnet:
@@ -31,7 +32,7 @@
       - "{{ subnet_result.subnet.id }}"
     routes:
       - dest: 0.0.0.0/0
-        gateway_id: "{{ instance.key }}-igw"
+        gateway_id: "{{ igw_result.gateway_id }}"
     tags: "{{ current_tags | combine({ 'Name': instance.key + '-rtbl' }) }}"
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
@@ -50,6 +51,9 @@
     profile: "{{ aws_profile }}"
   register: sg_result
 
+- debug:
+    msg: "{{ sg_result }}"
+
 # FIXME(bandini): Is there really no better way to extend an existing (or even a new)
 # dictionary with new info??
 - name: Extend ec2_vpcs variable with newly create info
@@ -59,7 +63,8 @@
         ec2_vpcs | combine({
           instance.key: instance.value | combine({ 
             'vpc_id': vpc_result.vpc.id,
-            'subnet_id': subnet_result.subnet.id
+            'subnet_id': subnet_result.subnet.id,
+            'security_group_id': sg_result.group_id
           })
         }, recursive=True)
       }}

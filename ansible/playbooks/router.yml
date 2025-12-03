@@ -43,6 +43,10 @@
         loop_var: instance
         label: "{{ instance.key }}"
 
+    - name: debug vms
+      ansible.builtin.debug:
+        msg: "{{ ec2_vms }}"
+
     - ansible.builtin.fail:
         msg: "STOP"
 
