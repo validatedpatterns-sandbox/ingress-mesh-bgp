@@ -18,6 +18,13 @@
         name: "{{ ec2_ssh_key_name }}"
         state: absent
 
+    - name: Delete all EC2s
+      ansible.builtin.include_tasks: delete_ec2.yml
+      loop: "{{ ec2_vms | dict2items }}"
+      loop_control:
+        loop_var: instance
+        label: "{{ instance.key }}"
+
     - name: Delete all VPCs
       ansible.builtin.include_tasks: delete_vpc.yml
       loop: "{{ ec2_vpcs | dict2items }}"

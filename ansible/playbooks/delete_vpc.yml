@@ -15,6 +15,7 @@
   amazon.aws.ec2_eip_info:
     filters:
       "tag:Name": "{{ instance.key }}-eip"
+      "tag:washere": "{{ aws_arn_userid }}"
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
   register: eip_info
