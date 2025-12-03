@@ -25,6 +25,7 @@
           "tag:Name": "test-client-{{ hub_cluster_name }}"
           instance-state-name: ["pending", "running", "shutting-down", "stopping", "stopped"]
       register: ec2_node_info
+
     - name: Delete ec2 instance if it exists
       when: ec2_node_info.instances | length != 0
       block:

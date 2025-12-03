@@ -19,9 +19,6 @@ metallb_bfd_enable: false         # Change to true to enable bgo+bfd
 # TODO: changing the above when using aws route server requires a redeploy, but
 # currently not working if set to true when using aws route server, bfd wont be healthy
 
-aws_route_server: false           # Change this to true to use the aws native implementation instead of an ec2 with frr as a TOR
-aws_route_server_peer_detection: "{{ 'bfd' if metallb_bfd_enable else 'bgp-keepalive' }}"
-
 # This needs to be t2.small (as opposed to t2.micro) so we can have 3 nics (needed for the core)
 aws_ec2_instance_type: t2.small
 

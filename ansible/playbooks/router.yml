@@ -186,15 +186,6 @@
         client_spoke_private_ip: "{{ spoke_eni_list[0].private_ip_addresses[0].private_ip_address }}"
         client_hub_private_ip: "{{ hub_eni_list[0].private_ip_addresses[0].private_ip_address }}"
 
-    - name: Create aws route server infrastructure
-      ansible.builtin.include_tasks: aws_route_server.yml
-      loop:
-        - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}" }
-        - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}" }
-      loop_control:
-        loop_var: ocp
-      when: aws_route_server
-
     - name: Create aws frr ec2 infrastructure
       ansible.builtin.include_tasks: aws_ec2_frr.yml
       loop:
@@ -216,12 +207,10 @@
           }
       loop_control:
         loop_var: ocp
-      when: aws_route_server is false
 
     - name: Print FRR Private IPs
       ansible.builtin.debug:
         msg: "Hub IP: {{ hub_frr_private_ip }} - Spoke IP: {{ spoke_frr_private_ip }}"
-      when: aws_route_server is false
 
     - name: Configure frr on client {{ fqdn_nodot }}
       become: true
