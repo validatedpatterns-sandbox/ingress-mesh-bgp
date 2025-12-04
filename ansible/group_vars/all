@@ -44,18 +44,24 @@ ec2_vms:
     vpc: coreclient
     private_ip: 192.168.8.10
     type: t2.micro
+    extra_nics: []
 
   core:
     vpc: coreclient
     private_ip: 192.168.8.100
     type: t2.small
+    extra_nics:
+      - vpc: corewest
+      - vpc: coreeast
 
   westtor:
     vpc: corewest
     private_ip: 192.168.12.100
     type: t2.micro
+    extra_nics: []
 
   easttor:
     vpc: coreeast
     private_ip: 192.168.16.100
     type: t2.micro
+    extra_nics: []
