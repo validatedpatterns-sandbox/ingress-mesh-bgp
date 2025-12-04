@@ -94,6 +94,10 @@
   ansible.builtin.set_fact:
     aws_region: "eu-west-3"
 
+- name: Set AWS AZ
+  ansible.builtin.set_fact:
+    aws_az: "{{ aws_region }}a"
+
 - name: Print AWS infos
   ansible.builtin.debug:
     msg: "AWS User: {{ aws_arn_userid }} - AWS Profile: {{ aws_profile }} - AWS Region: {{ aws_region }}"

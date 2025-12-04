@@ -5,6 +5,11 @@ aws_ami_owner: 309956199498
 aws_ami_name: "RHEL-10*"
 aws_ami_arch: "x86_64"
 
+aws_default_tags:
+  pattern: ingress
+
+aws_default_az: ""
+
 ssh_pubkey: "{{ lookup('file', '~/.ssh/id_rsa.pub' | expanduser) }}"
 wait_for_ssh_timeout: 600
 
@@ -19,9 +24,6 @@ metallb_openshift_spoke_asn: 65002
 metallb_client_side_asn: 64666
 metallb_address_pool: 192.168.155.0/24
 metallb_bfd_enable: true
-
-aws_default_tags:
-  pattern: ingress
 
 ec2_vpcs:
   coreclient:
@@ -52,7 +54,10 @@ ec2_vms:
     type: t2.small
     extra_nics:
       - vpc: corewest
+        ip: 192.168.12.200
+
       - vpc: coreeast
+        ip: 192.168.16.200
 
   westtor:
     vpc: corewest

@@ -17,6 +17,7 @@
 
 - name: Create Subnet {{ instance.key }}-net
   amazon.aws.ec2_vpc_subnet:
+    az: "{{ aws_az }}"
     vpc_id: "{{ vpc_result.vpc.id }}"
     cidr: "{{ instance.value.subnet_cidr }}"
     map_public: true
@@ -50,9 +51,6 @@
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
   register: sg_result
-
-- debug:
-    msg: "{{ sg_result }}"
 
 # FIXME(bandini): Is there really no better way to extend an existing (or even a new)
 # dictionary with new info??
