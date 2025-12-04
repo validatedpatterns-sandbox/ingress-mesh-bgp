@@ -17,11 +17,8 @@ hosted_zone: aws.validatedpatterns.io.
 
 acm_import_clustergroup_label: group-one
 
-metallb_aws_hub_tor_asn: 64001
-metallb_aws_spoke_tor_asn: 64002
-metallb_openshift_hub_asn: 65001
-metallb_openshift_spoke_asn: 65002
-metallb_client_side_asn: 64666
+metallb_openshift_west_asn: 65001
+metallb_openshift_east_asn: 65002
 metallb_address_pool: 192.168.155.0/24
 metallb_bfd_enable: true
 
@@ -72,3 +69,46 @@ ec2_vms:
     private_ip: 192.168.16.100
     type: t2.micro
     extra_nics: []
+
+ec2_frrs:
+  core:
+    asn: 64666
+    private_ip: 192.168.8.100
+    connections:
+      - remote_ip: 192.168.12.100
+        local_ip: 192.168.12.200
+        asn: 64001
+        group_name: towest
+
+      - remote_ip: 192.168.16.100
+        local_ip: 192.168.16.200
+        asn: 64002
+        group_name: toeast
+
+    fixed_advertisements:
+      - 192.168.8.0/24
+
+  westtor:
+    asn: 64001
+    private_ip: 192.168.12.100
+    connections:
+      - remote_ip: 192.168.12.200
+        local_ip: 192.168.12.100
+        asn: 64666
+        group_name: tocore
+      # We will extend this list dynamically with the ocp workers ips-asn
+    fixed_advertisements:
+      - "{{ metallb_address_pool }}"
+
+  easttor:
+    asn: 64002
+    private_ip: 192.168.16.100
+    connections:
+      # From .16.100
+      - remote_ip: 192.168.16.200
+        local_ip: 192.168.16.100
+        group_name: tocore
+        asn: 64666
+      # We will extend this list dynamically with the ocp workers ips-asn
+    fixed_advertisements:
+      - "{{ metallb_address_pool }}"

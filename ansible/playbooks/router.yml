@@ -66,29 +66,15 @@
         loop_var: ocp
         label: "{{ ocp.name }}"
 
-    - name: Create aws frr ec2 infrastructure
+    - name: Configure FRR on core, torwest and torweast
       ansible.builtin.include_tasks: aws_ec2_frr.yml
-      loop:
-        - { 
-            name: "west",
-            config: "{{ WESTCONFIG }}",
-            cluster_name: "{{ west_cluster_name }}",
-            frr_client_leg_ip: "{{ client_hub_private_ip }}",
-            metallb_asn: "{{ metallb_aws_hub_tor_asn }}",
-            metallb_openshift_asn: "{{ metallb_openshift_hub_asn }}"
-          }
-        - { 
-            name: "east",
-            config: "{{ EASTCONFIG }}",
-            cluster_name: "{{ east_cluster_name }}",
-            frr_client_leg_ip: "{{ client_spoke_private_ip }}",
-            metallb_asn: "{{ metallb_aws_spoke_tor_asn }}",
-            metallb_openshift_asn: "{{ metallb_openshift_spoke_asn }}"
-          }
+      loop: "{{ ec2_frrs | dict2items }}"
       loop_control:
-        loop_var: ocp
+        loop_var: frr
+        label: "{{ frr.key }}"
 
-    - ansible.builtin.failure:
+    - name: fail
+      ansible.builtin.fail:
         msg: "STOP HERE"
 
     - name: Print FRR Private IPs

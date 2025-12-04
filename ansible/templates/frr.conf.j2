@@ -12,38 +12,39 @@ debug bfd peer
 {% endif -%}
 
 ip prefix-list ACCEPT_LAB seq 5 permit {{ metallb_address_pool }} le 32
+{% set ns = namespace(count=10) %}
+{% for key, value in ec2_vpcs.items() %}
+ip prefix-list ACCEPT_LAB seq {{ ns.count }} permit {{ value.subnet_cidr }} le 32
+{% set ns.count = ns.count + 5 %}
+{% endfor %}
 
 !
-router bgp {{ asn }}
+router bgp {{ frr.value.asn }}
  timers bgp 3 15
  no bgp ebgp-requires-policy
  no bgp default ipv4-unicast
  no bgp network import-check
  bgp bestpath as-path multipath-relax
 
-{% for group_name, ips in bgp_neighbors.items() %}
- neighbor {{ group_name }} peer-group
- neighbor {{ group_name }} remote-as {{ peer_asns[group_name] | default(65000) }}
-{% for ip in ips %}
- neighbor {{ ip }} peer-group {{ group_name }}
- neighbor {{ ip }} bfd
-{% endfor %}
+{% for connection in frr.value.connections %}
+ neighbor {{ connection.group_name }} peer-group
+ neighbor {{ connection.group_name }} remote-as {{ connection.asn }}
+ neighbor {{ connection.remote_ip }} peer-group {{ connection.group_name }}
+ neighbor {{ connection.remote_ip }} bfd
 {% endfor %}
 
  address-family ipv4 unicast
-{% if is_tor | default(false) %}
-    network {{ metallb_address_pool }}
-{% endif %}
-{% for group_name, ips in bgp_neighbors.items() %}
-{% for ip in ips %}
-    neighbor {{ ip }} next-hop-self
-    neighbor {{ ip }} soft-reconfiguration inbound
-    neighbor {{ ip }} activate
-    neighbor {{ ip }} route-map ACCEPT_LAB in
+{% for adv_routes in frr.value.fixed_advertisements %}
+  network {{ adv_routes }}
 {% endfor %}
+{% for connection in frr.value.connections %}
+  neighbor {{ connection.remote_ip }} next-hop-self
+  neighbor {{ connection.remote_ip }} soft-reconfiguration inbound
+  neighbor {{ connection.remote_ip }} activate
+  neighbor {{ connection.remote_ip }} route-map ACCEPT_LAB in
 {% endfor %}
   maximum-paths 4
- exit-address-family
+exit-address-family
 !
 route-map ACCEPT_LAB permit 10
   match ip address prefix-list ACCEPT_LAB
@@ -51,12 +52,10 @@ exit
 !
 {% if metallb_bfd_enable %}
 bfd
-{% for group_name, ips in bgp_neighbors.items() %}
-{% for ip in ips %}
- peer {{ ip }} multihop local-address {{ bfd_localaddresses[group_name][loop.index0] }}
+{% for connection in frr.value.connections %}
+  peer {{ connection.remote_ip }} multihop local-address {{ connection.local_ip }}
 {% endfor %}
-{% endfor %}
- exit
- !
 exit
 {% endif %}
+!
+exit
