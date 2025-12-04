@@ -75,15 +75,15 @@ ec2_frrs:
     asn: 64666
     private_ip: 192.168.8.100
     connections:
-      - remote_ip: 192.168.12.100
+      towest:
+        remote_ip: 192.168.12.100
         local_ip: 192.168.12.200
         asn: 64001
-        group_name: towest
 
-      - remote_ip: 192.168.16.100
+      toeast:
+        remote_ip: 192.168.16.100
         local_ip: 192.168.16.200
         asn: 64002
-        group_name: toeast
 
     fixed_advertisements:
       - 192.168.8.0/24
@@ -92,10 +92,10 @@ ec2_frrs:
     asn: 64001
     private_ip: 192.168.12.100
     connections:
-      - remote_ip: 192.168.12.200
+      tocore:
+        remote_ip: 192.168.12.200
         local_ip: 192.168.12.100
         asn: 64666
-        group_name: tocore
       # We will extend this list dynamically with the ocp workers ips-asn
     fixed_advertisements:
       - "{{ metallb_address_pool }}"
@@ -104,10 +104,9 @@ ec2_frrs:
     asn: 64002
     private_ip: 192.168.16.100
     connections:
-      # From .16.100
+      tocore:
       - remote_ip: 192.168.16.200
         local_ip: 192.168.16.100
-        group_name: tocore
         asn: 64666
       # We will extend this list dynamically with the ocp workers ips-asn
     fixed_advertisements:

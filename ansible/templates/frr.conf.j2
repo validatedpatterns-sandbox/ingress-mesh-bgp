@@ -26,10 +26,10 @@ router bgp {{ frr.value.asn }}
  no bgp network import-check
  bgp bestpath as-path multipath-relax
 
-{% for connection in frr.value.connections %}
- neighbor {{ connection.group_name }} peer-group
- neighbor {{ connection.group_name }} remote-as {{ connection.asn }}
- neighbor {{ connection.remote_ip }} peer-group {{ connection.group_name }}
+{% for key,connection in frr.value.connections.items() %}
+ neighbor {{ key }} peer-group
+ neighbor {{ key }} remote-as {{ connection.asn }}
+ neighbor {{ connection.remote_ip }} peer-group {{ key }}
  neighbor {{ connection.remote_ip }} bfd
 {% endfor %}
 
@@ -37,7 +37,7 @@ router bgp {{ frr.value.asn }}
 {% for adv_routes in frr.value.fixed_advertisements %}
   network {{ adv_routes }}
 {% endfor %}
-{% for connection in frr.value.connections %}
+{% for key,connection in frr.value.connections.items() %}
   neighbor {{ connection.remote_ip }} next-hop-self
   neighbor {{ connection.remote_ip }} soft-reconfiguration inbound
   neighbor {{ connection.remote_ip }} activate
@@ -52,7 +52,7 @@ exit
 !
 {% if metallb_bfd_enable %}
 bfd
-{% for connection in frr.value.connections %}
+{% for key, connection in frr.value.connections.items() %}
   peer {{ connection.remote_ip }} multihop local-address {{ connection.local_ip }}
 {% endfor %}
 exit
