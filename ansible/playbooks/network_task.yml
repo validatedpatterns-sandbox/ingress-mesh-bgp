@@ -1,10 +1,9 @@
 # This task assumes that it is invoked with the following loop:
 # loop:
-#   - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}" }
-#   - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}" }
+#   - { name: "west", config: "{{ WESTCONFIG }}", cluster_name: "{{ west_cluster_name }}" }
+#   - { name: "east", config: "{{ EASTCONFIG }}", cluster_name: "{{ east_cluster_name }}" }
 # loop_control:
 #   loop_var: ocp
-
 
 - name: Get worker node ip list for "{{ ocp.name }}"
   ansible.builtin.shell: |
@@ -15,11 +14,11 @@
 
 - name: Gather security group info for workers for "{{ ocp.name }}"
   amazon.aws.ec2_security_group_info:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
     filters:
       "tag:sigs.k8s.io/cluster-api-provider-aws/role": "node"
       "tag:Name": "{{ ocp.cluster_name }}-*"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
   register: ec2_security_group_info
 
 - name: Debug for "{{ ocp.name }} - {{ ocp.cluster_name }}"
@@ -35,17 +34,16 @@
 
 - name: Gather vpc subnet info for workers for "{{ ocp.name }}"
   amazon.aws.ec2_vpc_subnet_info:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
     filters:
       vpc-id: "{{ sg_vpc_id }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
   register: ec2_vpc_subnet_info
 
+# only add the public subnet, and there will be only exactly one
 - name: Set public subnet id for "{{ ocp.name }}"
-  ansible.builtin.set_fact: # only add the public subnet, and there will be only exactly one
+  ansible.builtin.set_fact:
     public_subnet_id: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', true) | selectattr('availability_zone', '==', aws_az) | map(attribute='subnet_id') | first }}"
-  vars:
-    aws_az: "{{ aws_region }}a"
 
 - name: Set full var public subnet id for "{{ ocp.name }}"
   ansible.builtin.set_fact: # only add the public subnet, and there will be only exactly one
@@ -58,26 +56,30 @@
 
 - name: Open up worker node security groups
   amazon.aws.ec2_security_group:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
     name: "{{ sg_group_name }}"
     description: "{{ sg_worker_description }}"
     rules:
       - proto: all
         cidr_ip: 10.0.0.0/8 # TODO: get this from the vpc
         rule_desc: All port from vpc
+      - proto: all
+        cidr_ip: 192.168.0.0/16 
+        rule_desc: Allow client-core-tors
     purge_rules: false
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
 
 - name: Get NICs for a vpc
   amazon.aws.ec2_eni_info:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
     filters:
       vpc-id: "{{ sg_vpc_id }}"
       interface-type: interface
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
   register: ec2_eni_info
 
-# Modify the each worker node interface to disable source/dest check (needed for the ip address not on the vpc)
+# Modify the each worker node interface to disable source/dest check (needed
+# for the ip address not on the vpc)
 - name: Disable source/dest check on worker node NIC-s
   amazon.aws.ec2_eni:
     profile: "{{ aws_profile }}"

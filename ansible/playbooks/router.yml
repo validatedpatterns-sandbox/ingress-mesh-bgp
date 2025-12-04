@@ -8,7 +8,7 @@
     - ../overrides.yml
 
   tasks:
-    - name: Checks
+    - name: Checks for ocp clusters and sets aws_region, aws_az and aws_arn_userid
       ansible.builtin.include_tasks: check_task.yml
 
     - name: Fetch AMI id and set ec2_ami_image_id
@@ -47,17 +47,16 @@
       ansible.builtin.debug:
         msg: "{{ ec2_vms }}"
 
-    - ansible.builtin.fail:
-        msg: "STOP"
-
-    - name: Configure networking for hub and spoke clusters
+    - name: Configure networking for west and east clusters
       ansible.builtin.include_tasks: network_task.yml
       loop:
-        - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}" }
-        - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}" }
+        - { name: "west", config: "{{ WESTCONFIG }}", cluster_name: "{{ west_cluster_name }}" }
+        - { name: "east", config: "{{ EASTCONFIG }}", cluster_name: "{{ east_cluster_name }}" }
       loop_control:
         loop_var: ocp
 
+    - ansible.builtin.fail:
+        msg: "STOP"
 
     - name: Get ENI in spoke's vpc subnet
       amazon.aws.ec2_eni_info:

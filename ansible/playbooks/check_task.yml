@@ -20,79 +20,83 @@
     WESTCONFIG: "{{ lookup('env', 'WESTCONFIG') }}"
     EASTCONFIG: "{{ lookup('env', 'EASTCONFIG') }}"
 
-# - name: Check for correct WESTCONFIG variables
-#   ansible.builtin.fail:
-#     msg: "WESTCONFIG variable needs to be set and pointing to the WEST cluster (with ACM) kubeconfig file"
-#   when:
-#     WESTCONFIG is not defined or WESTCONFIG | length == 0
-#
-# - name: Check for correct EASTCONFIG env variable
-#   ansible.builtin.fail:
-#     msg: "EASTCONFIG variable needs to be set and pointing to the EAST cluster (without ACM) kubeconfig file"
-#   when:
-#     EASTCONFIG is not defined or EASTCONFIG | length == 0
-#
-# - name: Show the two cluster kubeconfig paths
-#   ansible.builtin.debug:
-#     msg: "WESTCONFIG: {{ WESTCONFIG }} - EASTCONFIG: {{ EASTCONFIG }}"
-#
-# - name: Check that both clusters are reachable
-#   ansible.builtin.shell: |
-#     oc cluster-info
-#   environment:
-#     KUBECONFIG: "{{ item }}"
-#   loop:
-#     - "{{ WESTCONFIG }}"
-#     - "{{ EASTCONFIG }}"
-#
-# - name: Get cluster routes and set facts
-#   ansible.builtin.shell: |
-#     oc get Ingress.config.openshift.io/cluster -o jsonpath='{.spec.domain}'
-#   environment:
-#     KUBECONFIG: "{{ item.config }}"
-#   register: route_result
-#   loop:
-#     - { name: "west", config: "{{ WESTCONFIG }}" }
-#     - { name: "east", config: "{{ EASTCONFIG }}" }
-#
-# - name: Set cluster routes info dynamically
-#   ansible.builtin.set_fact:
-#     "{{ item.item.name }}_cluster_name": "{{ (item.stdout | split('.'))[1] }}"
-#     "{{ item.item.name }}_fqdn": "{{ (item.stdout | split('.'))[1:] | join('.') }}"
-#   loop: "{{ route_result.results }}"        
-#
-# - name: Get clusters' aws region
-#   ansible.builtin.shell: |
-#     oc get infrastructure cluster -o jsonpath='{.status.platformStatus.aws.region}'
-#   environment:
-#     KUBECONFIG: "{{ item.config }}"
-#   register: aws_region_result
-#   loop:
-#     - { name: "west", config: "{{ WESTCONFIG }}" }
-#     - { name: "east", config: "{{ EASTCONFIG }}" }
-#
-# - name: Set cluster aws region info dynamically
-#   ansible.builtin.set_fact:
-#     "{{ item.item.name }}_aws_region": "{{ item.stdout }}"
-#   loop: "{{ aws_region_result.results }}"        
-#
-# - name: Validate clusters are in the same region (unless explicitly overridden)
-#   ansible.builtin.assert:
-#     that:
-#       - west_aws_region == east_aws_region or allow_different_regions | default(false)
-#     fail_msg: |
-#       FATAL: Clusters are in different regions (west: {{ west_aws_region }}, east: {{ east_aws_region }}).
-#       Multi-region support is not fully implemented.
-#       If you want to proceed anyway, set 'allow_different_regions: true' in your overrides.yml file.
-#       WARNING: This may result in connectivity issues or deployment failures.
-#
-# - name: Set aws region
-#   ansible.builtin.set_fact:
-#     aws_region: "{{ west_aws_region }}"
+- name: Check for correct WESTCONFIG variables
+  ansible.builtin.fail:
+    msg: "WESTCONFIG variable needs to be set and pointing to the WEST cluster (with ACM) kubeconfig file"
+  when:
+    WESTCONFIG is not defined or WESTCONFIG | length == 0
 
-- name: TMP Set aws region
+- name: Check for correct EASTCONFIG env variable
+  ansible.builtin.fail:
+    msg: "EASTCONFIG variable needs to be set and pointing to the EAST cluster (without ACM) kubeconfig file"
+  when:
+    EASTCONFIG is not defined or EASTCONFIG | length == 0
+
+- name: Show the two cluster kubeconfig paths
+  ansible.builtin.debug:
+    msg: "WESTCONFIG: {{ WESTCONFIG }} - EASTCONFIG: {{ EASTCONFIG }}"
+
+- name: Check that both clusters are reachable
+  ansible.builtin.shell: |
+    oc cluster-info
+  environment:
+    KUBECONFIG: "{{ item }}"
+  loop:
+    - "{{ WESTCONFIG }}"
+    - "{{ EASTCONFIG }}"
+
+- name: Get cluster routes and set facts
+  ansible.builtin.shell: |
+    oc get Ingress.config.openshift.io/cluster -o jsonpath='{.spec.domain}'
+  environment:
+    KUBECONFIG: "{{ item.config }}"
+  register: route_result
+  loop:
+    - { name: "west", config: "{{ WESTCONFIG }}" }
+    - { name: "east", config: "{{ EASTCONFIG }}" }
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Set cluster routes info dynamically
   ansible.builtin.set_fact:
-    aws_region: "eu-west-3"
+    "{{ item.item.name }}_cluster_name": "{{ (item.stdout | split('.'))[1] }}"
+    "{{ item.item.name }}_fqdn": "{{ (item.stdout | split('.'))[1:] | join('.') }}"
+  loop: "{{ route_result.results }}"        
+  loop_control:
+    label: "{{ item.stdout }}"
+
+- name: Get clusters' aws region
+  ansible.builtin.shell: |
+    oc get infrastructure cluster -o jsonpath='{.status.platformStatus.aws.region}'
+  environment:
+    KUBECONFIG: "{{ item.config }}"
+  register: aws_region_result
+  loop:
+    - { name: "west", config: "{{ WESTCONFIG }}" }
+    - { name: "east", config: "{{ EASTCONFIG }}" }
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Set cluster aws region info dynamically
+  ansible.builtin.set_fact:
+    "{{ item.item.name }}_aws_region": "{{ item.stdout }}"
+  loop: "{{ aws_region_result.results }}"        
+  loop_control:
+    label: "{{ item.stdout }}"
+
+- name: Validate clusters are in the same region (unless explicitly overridden)
+  ansible.builtin.assert:
+    that:
+      - west_aws_region == east_aws_region or allow_different_regions | default(false)
+    fail_msg: |
+      FATAL: Clusters are in different regions (west: {{ west_aws_region }}, east: {{ east_aws_region }}).
+      Multi-region support is not fully implemented.
+      If you want to proceed anyway, set 'allow_different_regions: true' in your overrides.yml file.
+      WARNING: This may result in connectivity issues or deployment failures.
+
+- name: Set aws region
+  ansible.builtin.set_fact:
+    aws_region: "{{ west_aws_region }}"
 
 - name: Set AWS AZ
   ansible.builtin.set_fact:
