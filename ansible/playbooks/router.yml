@@ -66,95 +66,30 @@
         loop_var: ocp
         label: "{{ ocp.name }}"
 
-    - ansible.builtin.fail:
-        msg: "STOP"
-
-    - name: Get ENI in spoke's vpc subnet
-      amazon.aws.ec2_eni_info:
-        profile: "{{ aws_profile }}"
-        region: "{{ aws_region }}"
-        filters:
-          attachment.instance-id: "{{ client_instance_info.instance_ids[0] }}"
-          subnet-id: "{{ spoke_public_subnet_id }}"
-      register: ec2_eni_info_raw
-
-    - name: Create ENI in spoke's vpc subnet if not exists
-      amazon.aws.ec2_eni:
-        profile: "{{ aws_profile }}"
-        region: "{{ aws_region }}"
-        subnet_id: "{{ spoke_public_subnet_id }}" # ⬅️ Subnet in VPC B, but same AZ
-        security_groups: "test-client-{{ spoke_cluster_name }}-security-group"
-        instance_id: "{{ client_instance_info.instance_ids[0] }}"
-        device_index: 1  # ⬅️ Must be 1 or greater for a secondary NIC
-        attached: true
-        tags:
-          Name: "{{ spoke_cluster_name }}-client-vpc-nic"
-      register: eni_created
-      when: ec2_eni_info_raw['network_interfaces'] | length == 0
-
-    - name: Debug eni info
-      ansible.builtin.debug:
-        msg: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
-
-    # Modify the interface to enable the delete_on_terminaton flag
-    - name: Make sure we delete the ENI when we remove the ec2 VM
-      amazon.aws.ec2_eni:
-        profile: "{{ aws_profile }}"
-        region: "{{ aws_region }}"
-        eni_id: "{{ eni_id }}"
-        source_dest_check: false
-        delete_on_termination: true
-      vars:
-        eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
-
-    - name: Fetch client ec2
-      amazon.aws.ec2_instance_info:
-        region: "{{ aws_region }}"
-        instance_ids:
-          - "{{ client_instance_id }}"
-      register: ec2_info
-
-    - name: Find network interfaces for each subnet
-      ansible.builtin.set_fact:
-        spoke_eni_list: "{{ ec2_info.instances[0].network_interfaces | selectattr('subnet_id', 'equalto', spoke_public_subnet_id) | list }}"
-        hub_eni_list: "{{ ec2_info.instances[0].network_interfaces | selectattr('subnet_id', 'equalto', hub_public_subnet_id) | list }}"
-
-    - name: Validate network interfaces were found
-      ansible.builtin.assert:
-        that:
-          - spoke_eni_list | length > 0
-          - hub_eni_list | length > 0
-        fail_msg: |
-          Failed to find network interfaces:
-          - Spoke subnet {{ spoke_public_subnet_id }}: {{ spoke_eni_list | length }} interface(s) found
-          - Hub subnet {{ hub_public_subnet_id }}: {{ hub_eni_list | length }} interface(s) found
-
-    - name: Extract private IPs from network interfaces
-      ansible.builtin.set_fact:
-        client_spoke_private_ip: "{{ spoke_eni_list[0].private_ip_addresses[0].private_ip_address }}"
-        client_hub_private_ip: "{{ hub_eni_list[0].private_ip_addresses[0].private_ip_address }}"
-
     - name: Create aws frr ec2 infrastructure
       ansible.builtin.include_tasks: aws_ec2_frr.yml
       loop:
         - { 
-            name: "hub",
-            config: "{{ HUBCONFIG }}",
-            cluster_name: "{{ hub_cluster_name }}",
+            name: "west",
+            config: "{{ WESTCONFIG }}",
+            cluster_name: "{{ west_cluster_name }}",
             frr_client_leg_ip: "{{ client_hub_private_ip }}",
             metallb_asn: "{{ metallb_aws_hub_tor_asn }}",
             metallb_openshift_asn: "{{ metallb_openshift_hub_asn }}"
           }
         - { 
-            name: "spoke",
-            config: "{{ SPOKECONFIG }}",
-            cluster_name: "{{ spoke_cluster_name }}",
+            name: "east",
+            config: "{{ EASTCONFIG }}",
+            cluster_name: "{{ east_cluster_name }}",
             frr_client_leg_ip: "{{ client_spoke_private_ip }}",
             metallb_asn: "{{ metallb_aws_spoke_tor_asn }}",
             metallb_openshift_asn: "{{ metallb_openshift_spoke_asn }}"
           }
       loop_control:
         loop_var: ocp
+
+    - ansible.builtin.failure:
+        msg: "STOP HERE"
 
     - name: Print FRR Private IPs
       ansible.builtin.debug:
