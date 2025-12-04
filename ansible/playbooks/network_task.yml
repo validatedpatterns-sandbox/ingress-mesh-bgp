@@ -192,13 +192,14 @@
 
 # FIXME(bandini): ideally we check the connection name before
 # We calculate the gateway as Network Address + 1. If google is to be 
-# believed that is always true on AWS
+# believed that is always true on AWS. Some with the enX1 nic name
 - name: Drop second default route and add route to reach "{{ ocp.name }}" workers
   become: true
   delegate_to: "{{ ocp.tor_vm }}"
   ansible.builtin.shell: |
     set -e
-    GW=$(python3 -c "import ipaddress, sys; iface = ipaddress.ip_interface(sys.argv[1]); print(iface.network.network_address + 1)" $(ip -o -4 addr show enX1 | awk '{print $4}'))
+    GW=$(python3 -c "import ipaddress, sys; iface = ipaddress.ip_interface(sys.argv[1]); \
+      print(iface.network.network_address + 1)" $(ip -o -4 addr show enX1 | awk '{print $4}'))
     echo "Found GW: ${GW}"
     nmcli c modify "Wired connection 1" ipv4.never-default yes
     nmcli c modify "Wired connection 1" +ipv4.routes "{{ target_cidr }} ${GW}"
