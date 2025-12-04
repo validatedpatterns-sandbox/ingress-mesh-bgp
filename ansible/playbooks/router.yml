@@ -50,10 +50,21 @@
     - name: Configure networking for west and east clusters
       ansible.builtin.include_tasks: network_task.yml
       loop:
-        - { name: "west", config: "{{ WESTCONFIG }}", cluster_name: "{{ west_cluster_name }}" }
-        - { name: "east", config: "{{ EASTCONFIG }}", cluster_name: "{{ east_cluster_name }}" }
+        - { 
+            name: "west",
+            config: "{{ WESTCONFIG }}",
+            cluster_name: "{{ west_cluster_name }}",
+            tor_vm: "westtor"
+          } 
+        - { 
+            name: "east",
+            config: "{{ EASTCONFIG }}",
+            cluster_name: "{{ east_cluster_name }}",
+            tor_vm: "easttor"
+          }
       loop_control:
         loop_var: ocp
+        label: "{{ ocp.name }}"
 
     - ansible.builtin.fail:
         msg: "STOP"

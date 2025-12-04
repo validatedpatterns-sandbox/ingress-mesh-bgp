@@ -11,3 +11,6 @@
   - Bonus points for a reverse proxy on the client
   - One static route towards the core
 - Reorganize the charts (applications/components)
+
+Nice to have:
+- Figure out a solid way to always use the same addresses for the TORs workers NIC

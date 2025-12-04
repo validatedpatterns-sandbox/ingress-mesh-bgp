@@ -1,9 +1,43 @@
 # This task assumes that it is invoked with the following loop:
 # loop:
-#   - { name: "west", config: "{{ WESTCONFIG }}", cluster_name: "{{ west_cluster_name }}" }
-#   - { name: "east", config: "{{ EASTCONFIG }}", cluster_name: "{{ east_cluster_name }}" }
+#   - { 
+#        name: "west",
+#        config: "{{ WESTCONFIG }}",
+#        cluster_name: "{{ west_cluster_name }}" 
+#        tor_vm: "westtor"
+#     } 
+#   - { 
+#        name: "east",
+#        config: "{{ EASTCONFIG }}",
+#        cluster_name: "{{ east_cluster_name }}" 
+#        tor_vm: "easttor"
+#     }
 # loop_control:
 #   loop_var: ocp
+- name: Fetch the config-v1 ConfigMap from kube-system
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: cluster-config-v1
+    namespace: kube-system
+    kubeconfig: "{{ ocp.config }}"
+  register: cluster_config_v1
+
+- debug:
+    msg:
+      config: "{{ cluster_config_v1 }}"
+
+- name: Extract MachineNetwork CIDR
+  ansible.builtin.set_fact:
+    target_cidr: >-
+      {{ 
+        (cluster_config_v1.resources[0].data['install-config'] | from_yaml).networking.machineNetwork[0].cidr 
+      }}
+  when: cluster_config_v1.resources | length > 0
+
+- name: Show CIDR for "{{ ocp.name }}"
+  ansible.builtin.debug:
+    msg: "The Machine Network CIDR is: {{ target_cidr }}"
 
 - name: Get worker node ip list for "{{ ocp.name }}"
   ansible.builtin.shell: |
@@ -93,10 +127,14 @@
   amazon.aws.ec2_security_group:
     profile: "{{ aws_profile }}"
     region: "{{ aws_region }}"
-    name: test-client-{{ ocp.cluster_name }}-security-group
-    description: sec group for test client
+    name: "{{ ocp.tor_vm }}-{{ ocp.cluster_name }}-security-group"
+    description: sec group for client
+    tags: "{{ current_tags | combine({ 'Name': ocp.tor_vm + '-' + ocp.name + '-sg' }) }}"
     vpc_id: "{{ sg_vpc_id }}"
     rules:
+    - proto: all
+      cidr_ip: 192.168.0.0/16
+      rule_desc: All traffic from client core and tors
     - proto: all
       cidr_ip: 10.0.0.0/8 # TODO: get this from the vpc
       rule_desc: All port from vpc
@@ -105,3 +143,63 @@
       to_port: 22
       cidr_ip: 0.0.0.0/0
       rule_desc: allow ssh access from the internet
+
+- name: Get ENI in OCP worker {{ ocp.name }} subnet for {{ ocp.tor_vm }}
+  amazon.aws.ec2_eni_info:
+    filters:
+      attachment.instance-id: "{{ ec2_vms[ocp.tor_vm].instance_id }}"
+      subnet-id: "{{ public_subnet_id }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  register: ec2_eni_info_raw
+
+- name: debug
+  debug:
+    msg: 
+      ec2_vms: "{{ ec2_vms }}"
+      sg_group_id: "{{ sg_group_id }}"
+      instance_id: "{{ ec2_vms[ocp.tor_vm].instance_id }}"
+      ec2_eni: "{{ ec2_eni_info_raw }}"
+      subnet_id: "{{ public_subnet_id }}"
+      fuckme: "{{ ocp.name }}_public_subnet_id"
+
+- name: Create ENI in TOR {{ ocp.tor_vm }} if it does not exists
+  amazon.aws.ec2_eni:
+    subnet_id: "{{ public_subnet_id }}"
+    security_groups: "{{ sg_group_id }}"
+    instance_id: "{{ ec2_vms[ocp.tor_vm].instance_id }}"
+    device_index: 1
+    attached: true
+    tags: "{{ current_tags | combine({ 'Name': ocp.tor_vm + '-' + ocp.name + '-nic' }) }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  register: eni_created
+  when: ec2_eni_info_raw['network_interfaces'] | length == 0
+
+- name: Debug ENI info
+  ansible.builtin.debug:
+    msg: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+
+- name: Make sure we delete the ENI when we remove the ec2 VM
+  amazon.aws.ec2_eni:
+    eni_id: "{{ eni_id }}"
+    source_dest_check: false
+    delete_on_termination: true
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  vars:
+    eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+
+# FIXME(bandini): ideally we check the connection name before
+# We calculate the gateway as Network Address + 1. If google is to be 
+# believed that is always true on AWS
+- name: Drop second default route and add route to reach "{{ ocp.name }}" workers
+  become: true
+  delegate_to: "{{ ocp.tor_vm }}"
+  ansible.builtin.shell: |
+    set -e
+    GW=$(python3 -c "import ipaddress, sys; iface = ipaddress.ip_interface(sys.argv[1]); print(iface.network.network_address + 1)" $(ip -o -4 addr show enX1 | awk '{print $4}'))
+    echo "Found GW: ${GW}"
+    nmcli c modify "Wired connection 1" ipv4.never-default yes
+    nmcli c modify "Wired connection 1" +ipv4.routes "{{ target_cidr }} ${GW}"
+    nmcli c up "Wired connection 1"
