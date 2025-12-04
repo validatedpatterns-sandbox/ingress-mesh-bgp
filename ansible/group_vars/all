@@ -55,9 +55,11 @@ ec2_vms:
     extra_nics:
       - vpc: corewest
         ip: 192.168.12.200
+        metric: 101
 
       - vpc: coreeast
         ip: 192.168.16.200
+        metric: 101
 
   westtor:
     vpc: corewest

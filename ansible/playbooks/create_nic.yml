@@ -34,3 +34,13 @@
     region: "{{ aws_region }}"
   vars:
     eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+
+# FIXME(bandini): This assumes that the main nic is not called "Wired Connection"
+# experiments with community.general.nmcli failed horribly. The below works
+- name: Set metric on the newly created
+  become: true
+  delegate_to: "{{ instance.key }}"
+  ansible.builtin.shell: |
+    set -e
+    nmcli c modify "Wired connection {{ ansible_loop.index }}" ipv4.route-metric {{ nic.metric }}
+    nmcli c up "Wired connection {{ ansible_loop.index }}"
