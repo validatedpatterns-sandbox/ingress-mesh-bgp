@@ -43,10 +43,6 @@
         loop_var: instance
         label: "{{ instance.key }}"
 
-    - name: Print EC2 VMs
-      ansible.builtin.debug:
-        msg: "{{ ec2_vms }}"
-
     - name: Configure networking for west and east clusters
       ansible.builtin.include_tasks: network_task.yml
       loop:
@@ -73,68 +69,21 @@
         loop_var: frr
         label: "{{ frr.key }}"
 
-    - name: fail
-      ansible.builtin.fail:
-        msg: "STOP HERE"
-
-    - name: Print FRR Private IPs
+    - name: Print EC2 VMs
       ansible.builtin.debug:
-        msg: "Hub IP: {{ hub_frr_private_ip }} - Spoke IP: {{ spoke_frr_private_ip }}"
+        msg: "{{ ec2_vms }}"
 
-    - name: Configure frr on client {{ fqdn_nodot }}
-      become: true
-      delegate_to: "{{ fqdn_nodot }}"
-      block:
-        - name: Set hostname on {{ fqdn }}
-          ansible.builtin.hostname:
-            name: "test-client-{{ hub_cluster_name }}"
-            use: systemd
+    - name: Print TORs enX1 IPs
+      ansible.builtin.debug:
+        msg:
+          west_ip: "{{ west_enx1_ip }}"
+          east_ip: "{{ east_enx1_ip }}"
 
-        - name: Ensure packages are installed on client {{ fqdn_nodot }}
-          ansible.builtin.dnf:
-            name:
-              - frr
-            state: present
-            update_cache: true
-        - name: Create frr config on client {{ fqdn_nodot }}
-          ansible.builtin.template:
-            src: ../templates/frr.conf.j2
-            dest: /etc/frr/frr.conf
-            mode: '0644'
-          vars:
-            asn: "{{ metallb_client_side_asn }}"
-            bgp_neighbors:
-              hub:
-                - "{{ hub_frr_private_ip }}"
-              spoke:
-                - "{{ spoke_frr_private_ip }}"
-            bfd_localaddresses:
-              hub:
-                - "{{ client_hub_private_ip }}"
-              spoke:
-                - "{{ client_spoke_private_ip }}"
-            peer_asns:
-              hub: "{{ metallb_aws_hub_tor_asn }}"
-              spoke: "{{ metallb_aws_spoke_tor_asn }}"
-            is_tor: false
-
-        - name: Create frr daemons config on client {{ fqdn_nodot }}
-          ansible.builtin.template:
-            src: ../templates/daemons.j2
-            dest: /etc/frr/daemons
-            mode: '0644'
-
-        - name: Create vtysh config on client {{ fqdn_nodot }}
-          ansible.builtin.template:
-            src: ../templates/vtysh.conf.j2
-            dest: /etc/frr/vtysh.conf
-            mode: '0644'
-
-        - name: "Enable and start the frr Service"
-          ansible.builtin.service:
-            name: frr
-            enabled: true
-            state: restarted
+    - name: Generate tmux shell template
+      ansible.builtin.template:
+        src: ../templates/launch_tmux.sh.j2
+        dest: "/tmp/launch_tmux.sh"
+        mode: '0655'
 
   handlers:
     - name: Restart frr on frr nodes

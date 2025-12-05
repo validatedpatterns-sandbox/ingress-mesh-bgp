@@ -153,16 +153,6 @@
     region: "{{ aws_region }}"
   register: ec2_eni_info_raw
 
-- name: debug
-  debug:
-    msg: 
-      ec2_vms: "{{ ec2_vms }}"
-      sg_group_id: "{{ sg_group_id }}"
-      instance_id: "{{ ec2_vms[ocp.tor_vm].instance_id }}"
-      ec2_eni: "{{ ec2_eni_info_raw }}"
-      subnet_id: "{{ public_subnet_id }}"
-      fuckme: "{{ ocp.name }}_public_subnet_id"
-
 - name: Create ENI in TOR {{ ocp.tor_vm }} if it does not exists
   amazon.aws.ec2_eni:
     subnet_id: "{{ public_subnet_id }}"
@@ -190,6 +180,16 @@
   vars:
     eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
+- name: Wait for enX1
+  become: true
+  delegate_to: "{{ ocp.tor_vm }}"
+  ansible.builtin.shell: |
+    set -e -o pipefail
+    python3 -c "import ipaddress, sys; iface = ipaddress.ip_interface(sys.argv[1]); \
+      print(iface.network.network_address + 1)" $(ip -o -4 addr show enX1 | awk '{print $4}')
+  retries: 5
+  delay: 3
+
 # FIXME(bandini): ideally we check the connection name before
 # We calculate the gateway as Network Address + 1. If google is to be 
 # believed that is always true on AWS. Some with the enX1 nic name
@@ -197,10 +197,48 @@
   become: true
   delegate_to: "{{ ocp.tor_vm }}"
   ansible.builtin.shell: |
-    set -e
+    set -e -o pipefail
     GW=$(python3 -c "import ipaddress, sys; iface = ipaddress.ip_interface(sys.argv[1]); \
       print(iface.network.network_address + 1)" $(ip -o -4 addr show enX1 | awk '{print $4}'))
     echo "Found GW: ${GW}"
     nmcli c modify "Wired connection 1" ipv4.never-default yes
     nmcli c modify "Wired connection 1" +ipv4.routes "{{ target_cidr }} ${GW}"
     nmcli c up "Wired connection 1"
+
+- name: Gather Facts manually on {{ ocp.tor_vm }}
+  become: true
+  delegate_to: "{{ ocp.tor_vm }}"
+  delegate_facts: true
+  ansible.builtin.setup:
+
+- name: Set secondary NIC (towards workers) ip address fact
+  ansible.builtin.set_fact:
+    enx1_ip: "{{ hostvars[ocp.tor_vm]['ansible_enX1']['ipv4']['address']}}"
+    "{{ ocp.name }}_enx1_ip": "{{ hostvars[ocp.tor_vm]['ansible_enX1']['ipv4']['address']}}"
+
+- name: Create dynamic connection dictionary
+  ansible.builtin.set_fact:
+    new_connection: >-
+      {{
+        {
+          ocp.tor_vm: {
+            'connections': {
+              'to' ~ ocp.name: {
+                'asn': metallb_openshift_asn[ocp.name],
+                'local_ip': enx1_ip,
+                'remote_ips': worker_nodes.stdout_lines
+              }
+            }
+          }
+        }
+      }}
+
+- debug:
+    msg: "{{ new_connection }}"
+
+- name: Add new connection info to ec2_frrs
+  ansible.builtin.set_fact:
+    ec2_frrs: "{{ ec2_frrs | combine(new_connection, recursive=True) }}"
+
+- debug:
+    msg: "{{ ec2_frrs }}"

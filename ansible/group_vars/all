@@ -17,8 +17,9 @@ hosted_zone: aws.validatedpatterns.io.
 
 acm_import_clustergroup_label: group-one
 
-metallb_openshift_west_asn: 65001
-metallb_openshift_east_asn: 65002
+metallb_openshift_asn:
+  west: 65001
+  east: 65002
 metallb_address_pool: 192.168.155.0/24
 metallb_bfd_enable: true
 
@@ -76,12 +77,14 @@ ec2_frrs:
     private_ip: 192.168.8.100
     connections:
       towest:
-        remote_ip: 192.168.12.100
+        remote_ips: 
+          - 192.168.12.100
         local_ip: 192.168.12.200
         asn: 64001
 
       toeast:
-        remote_ip: 192.168.16.100
+        remote_ips: 
+          - 192.168.16.100
         local_ip: 192.168.16.200
         asn: 64002
 
@@ -93,7 +96,8 @@ ec2_frrs:
     private_ip: 192.168.12.100
     connections:
       tocore:
-        remote_ip: 192.168.12.200
+        remote_ips: 
+          - 192.168.12.200
         local_ip: 192.168.12.100
         asn: 64666
       # We will extend this list dynamically with the ocp workers ips-asn
@@ -105,7 +109,8 @@ ec2_frrs:
     private_ip: 192.168.16.100
     connections:
       tocore:
-      - remote_ip: 192.168.16.200
+        remote_ips: 
+          - 192.168.16.200
         local_ip: 192.168.16.100
         asn: 64666
       # We will extend this list dynamically with the ocp workers ips-asn

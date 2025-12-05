@@ -29,8 +29,10 @@ router bgp {{ frr.value.asn }}
 {% for key,connection in frr.value.connections.items() %}
  neighbor {{ key }} peer-group
  neighbor {{ key }} remote-as {{ connection.asn }}
- neighbor {{ connection.remote_ip }} peer-group {{ key }}
- neighbor {{ connection.remote_ip }} bfd
+{% for ip in connection.remote_ips %}
+ neighbor {{ ip }} peer-group {{ key }}
+ neighbor {{ ip }} bfd
+{% endfor %}
 {% endfor %}
 
  address-family ipv4 unicast
@@ -38,10 +40,12 @@ router bgp {{ frr.value.asn }}
   network {{ adv_routes }}
 {% endfor %}
 {% for key,connection in frr.value.connections.items() %}
-  neighbor {{ connection.remote_ip }} next-hop-self
-  neighbor {{ connection.remote_ip }} soft-reconfiguration inbound
-  neighbor {{ connection.remote_ip }} activate
-  neighbor {{ connection.remote_ip }} route-map ACCEPT_LAB in
+{% for ip in connection.remote_ips %}
+  neighbor {{ ip }} next-hop-self
+  neighbor {{ ip }} soft-reconfiguration inbound
+  neighbor {{ ip }} activate
+  neighbor {{ ip }} route-map ACCEPT_LAB in
+{% endfor %}
 {% endfor %}
   maximum-paths 4
 exit-address-family
@@ -53,7 +57,9 @@ exit
 {% if metallb_bfd_enable %}
 bfd
 {% for key, connection in frr.value.connections.items() %}
-  peer {{ connection.remote_ip }} multihop local-address {{ connection.local_ip }}
+{% for ip in connection.remote_ips %}
+  peer {{ ip }} multihop local-address {{ connection.local_ip }}
+{% endfor %}
 {% endfor %}
 exit
 {% endif %}
