@@ -83,7 +83,7 @@
       ansible.builtin.template:
         src: ../templates/launch_tmux.sh.j2
         dest: "/tmp/launch_tmux.sh"
-        mode: '0655'
+        mode: '0755'
 
   handlers:
     - name: Restart frr on frr nodes
