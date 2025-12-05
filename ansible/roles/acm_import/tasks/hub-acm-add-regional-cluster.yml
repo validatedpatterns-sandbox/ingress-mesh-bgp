@@ -6,7 +6,7 @@
 
 - name: "Check if ManagedCluster is registered"
   kubernetes.core.k8s_info:
-    kubeconfig: "{{ HUBCONFIG }}"
+    kubeconfig: "{{ WESTCONFIG }}"
     api_version: cluster.open-cluster-management.io/v1
     kind: ManagedCluster
     name: "{{ acm_import_region_cluster_name }}"
@@ -23,7 +23,7 @@
     - name: "Create regional ManagedCluster"
       kubernetes.core.k8s:
         state: present
-        kubeconfig: "{{ HUBCONFIG }}"
+        kubeconfig: "{{ WESTCONFIG }}"
         template: managedcluster.yml.j2
         wait: true
         wait_condition:
@@ -39,13 +39,13 @@
     - name: "Create regional KlusterAddonConfig"
       kubernetes.core.k8s:
         state: present
-        kubeconfig: "{{ HUBCONFIG }}"
+        kubeconfig: "{{ WESTCONFIG }}"
         template: klusterletaddonconfig.yml.j2
 
 - name: "Pull ManagedClusterJoined Status"
   ansible.builtin.set_fact:
     acm_import_ocm_mc_status: >
-      "{{ lookup('kubernetes.core.k8s', kubeconfig=HUBCONFIG, api_version='cluster.open-cluster-management.io/v1',
+      "{{ lookup('kubernetes.core.k8s', kubeconfig=WESTCONFIG, api_version='cluster.open-cluster-management.io/v1',
       kind='ManagedCluster', resource_name=acm_import_region_cluster_name) | json_query(jq_query) }}"
   vars:
     jq_query: "status.conditions[?type == 'ManagedClusterJoined'].status"
@@ -64,7 +64,7 @@
     - name: "[HUB] Get CRDs from Hub for the new ManagedCluster"
       ansible.builtin.set_fact:
         acm_import_import_crds: >
-          "{{ lookup('k8s', kubeconfig=HUBCONFIG, api_version='v1', kind='Secret', namespace=acm_import_region_cluster_name,
+          "{{ lookup('k8s', kubeconfig=WESTCONFIG, api_version='v1', kind='Secret', namespace=acm_import_region_cluster_name,
           resource_name=acm_import_cluster_import) | json_query(jq_query) }}"
       vars:
         jq_query: "data.\"crds.yaml\""
@@ -72,7 +72,7 @@
     - name: "[HUB] Get ROs from Hub for the new ManagedCluster"
       ansible.builtin.set_fact:
         acm_import_import_ros: >
-          "{{ lookup('k8s', kubeconfig=HUBCONFIG, api_version='v1', kind='Secret', namespace=acm_import_region_cluster_name,
+          "{{ lookup('k8s', kubeconfig=WESTCONFIG, api_version='v1', kind='Secret', namespace=acm_import_region_cluster_name,
           resource_name=acm_import_cluster_import) | json_query(jq_query) }}"
       vars:
         jq_query: "data.\"import.yaml\""
@@ -80,7 +80,7 @@
     - name: "[MC] Apply CRDs to new ManagedCluster"
       kubernetes.core.k8s:
         state: present
-        kubeconfig: "{{ SPOKECONFIG }}"
+        kubeconfig: "{{ EASTCONFIG }}"
         definition: "{{ acm_import_import_crds | b64decode }}"
       retries: 10
       delay: 20
@@ -88,7 +88,7 @@
     - name: "[MC] Apply ROs to new ManagedCluster"
       kubernetes.core.k8s:
         state: present
-        kubeconfig: "{{ SPOKECONFIG }}"
+        kubeconfig: "{{ EASTCONFIG }}"
         definition: "{{ acm_import_import_ros | b64decode }}"
       retries: 10
       delay: 20
