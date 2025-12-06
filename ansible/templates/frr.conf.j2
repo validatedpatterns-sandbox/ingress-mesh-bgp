@@ -32,6 +32,7 @@ router bgp {{ frr.value.asn }}
 {% for ip in connection.remote_ips %}
  neighbor {{ ip }} peer-group {{ key }}
  neighbor {{ ip }} bfd
+ neighbor {{ ip }} disable-connected-check
 {% endfor %}
 {% endfor %}
 
