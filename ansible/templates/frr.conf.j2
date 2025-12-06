@@ -45,7 +45,7 @@ router bgp {{ frr.value.asn }}
   neighbor {{ ip }} next-hop-self
   neighbor {{ ip }} soft-reconfiguration inbound
   neighbor {{ ip }} activate
-  neighbor {{ ip }} route-map ACCEPT_LAB in
+#  neighbor {{ ip }} route-map ACCEPT_LAB in
 {% endfor %}
 {% endfor %}
   maximum-paths 4
