@@ -11,6 +11,7 @@
   - Bonus points for a reverse proxy on the client
   - One static route towards the core
 - Reorganize the charts (applications/components)
+- Make sure we have externalTrafficPolicy: local on all the service objects
 
 Nice to have:
 - Figure out a solid way to always use the same addresses for the TORs workers NIC
