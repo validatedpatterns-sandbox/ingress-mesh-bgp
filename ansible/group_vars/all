@@ -15,7 +15,7 @@ wait_for_ssh_timeout: 600
 
 hosted_zone: aws.validatedpatterns.io.
 
-acm_import_clustergroup_label: group-one
+acm_import_clustergroup_label: east
 
 metallb_openshift_asn:
   west: 65001
