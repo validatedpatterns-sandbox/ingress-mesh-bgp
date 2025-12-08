@@ -144,7 +144,7 @@
       cidr_ip: 0.0.0.0/0
       rule_desc: allow ssh access from the internet
 
-- name: Get ENI in OCP worker {{ ocp.name }} subnet for {{ ocp.tor_vm }}
+- name: Get ENI in TOR {{ ocp.name }} subnet for {{ ocp.tor_vm }}
   amazon.aws.ec2_eni_info:
     filters:
       attachment.instance-id: "{{ ec2_vms[ocp.tor_vm].instance_id }}"
@@ -166,9 +166,9 @@
   register: eni_created
   when: ec2_eni_info_raw['network_interfaces'] | length == 0
 
-- name: Debug ENI info
-  ansible.builtin.debug:
-    msg: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+- name: Set additional ENI interface id
+  ansible.builtin.set_fact:
+    eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
 - name: Make sure we delete the ENI when we remove the ec2 VM
   amazon.aws.ec2_eni:
@@ -177,8 +177,6 @@
     delete_on_termination: true
     profile: "{{ aws_profile }}"
     region: "{{ aws_region }}"
-  vars:
-    eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
 - name: Wait for enX1
   become: true
@@ -241,6 +239,7 @@
   ansible.builtin.debug:
     msg: "{{ ec2_frrs }}"
 
+# Next three tasks tweak the route table towards the OCP workers
 - name: Gather the ec2 instance details (worker node, same AZ/subnet as ec2 client)
   amazon.aws.ec2_instance_info:
     filters:
@@ -273,3 +272,42 @@
   vars:
     rtb_id: "{{ get_route_tables_raw['route_tables'] | map(attribute='route_table_id') | first }}"
     ec2_id: "{{ ec2_node_info['instances'] | map(attribute='instance_id') | first }}"
+
+# Next two tasks tweak the route table of the west/east vpc
+- name: Get route table for vpc {{ ocp.vpc }}
+  amazon.aws.ec2_vpc_route_table_info:
+    filters:
+      association.subnet-id: "{{ ec2_vpcs[ocp.vpc]['subnet_id'] }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  register: get_vpc_route_table_raw
+
+- name: Get ENI in TOR {{ ocp.name }} tor-core subnet
+  amazon.aws.ec2_eni_info:
+    filters:
+      attachment.instance-id: "{{ ec2_vms[ocp.tor_vm]['instance_id'] }}"
+      subnet-id: "{{ ec2_vpcs[ocp.vpc]['subnet_id'] }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  register: tor_main_eni_raw
+
+- debug:
+    msg: "{{ tor_main_eni_raw }}"
+
+- debug:
+    msg: "{{ ec2_vpcs[ocp.vpc] }}"
+
+- name: Set up route table for vpc {{ ocp.vpc }}
+  amazon.aws.ec2_vpc_route_table:
+    vpc_id: "{{ ec2_vpcs[ocp.vpc]['vpc_id'] }}"
+    route_table_id: "{{ rtb_id }}"
+    lookup: id
+    purge_routes: false
+    routes:
+      - dest: "{{ target_cidr }}"
+        network_interface_id: "{{ tor_eni_id }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  vars:
+    rtb_id: "{{ get_vpc_route_table_raw['route_tables'] | map(attribute='route_table_id') | first }}"
+    tor_eni_id: "{{ tor_main_eni_raw['network_interfaces'][0]['id'] }}"

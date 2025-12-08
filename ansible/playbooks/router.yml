@@ -50,13 +50,15 @@
             name: "west",
             config: "{{ WESTCONFIG }}",
             cluster_name: "{{ west_cluster_name }}",
-            tor_vm: "westtor"
+            tor_vm: "westtor",
+            vpc: "corewest"
           } 
         - { 
             name: "east",
             config: "{{ EASTCONFIG }}",
             cluster_name: "{{ east_cluster_name }}",
-            tor_vm: "easttor"
+            tor_vm: "easttor",
+            vpc: "coreeast"
           }
       loop_control:
         loop_var: ocp
