@@ -233,12 +233,43 @@
         }
       }}
 
-- debug:
-    msg: "{{ new_connection }}"
-
 - name: Add new connection info to ec2_frrs
   ansible.builtin.set_fact:
     ec2_frrs: "{{ ec2_frrs | combine(new_connection, recursive=True) }}"
 
-- debug:
+- name: Print updated ec2_frrs
+  ansible.builtin.debug:
     msg: "{{ ec2_frrs }}"
+
+- name: Gather the ec2 instance details (worker node, same AZ/subnet as ec2 client)
+  amazon.aws.ec2_instance_info:
+    filters:
+      "tag:Name": "{{ ocp.cluster_name }}*-worker-*"
+      instance-state-name: ["pending","running"]
+      availability-zone: "{{ aws_az }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  register: ec2_node_info
+
+- name: Get route table for client ec2
+  amazon.aws.ec2_vpc_route_table_info:
+    filters:
+      association.subnet-id: "{{ public_subnet_id }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  register: get_route_tables_raw
+
+- name: Set up route table for client ec2 to ocp woker node instance
+  amazon.aws.ec2_vpc_route_table:
+    vpc_id: "{{ sg_vpc_id }}"
+    route_table_id: "{{ rtb_id  }}"
+    lookup: id
+    purge_routes: false
+    routes:
+      - dest: "{{ metallb_address_pool }}"
+        instance_id: "{{ ec2_id }}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+  vars:
+    rtb_id: "{{ get_route_tables_raw['route_tables'] | map(attribute='route_table_id') | first }}"
+    ec2_id: "{{ ec2_node_info['instances'] | map(attribute='instance_id') | first }}"
