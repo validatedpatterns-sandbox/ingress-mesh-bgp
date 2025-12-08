@@ -92,4 +92,4 @@
         state: restarted
       delegate_to: "{{ item }}"
       become: true
-      loop: "{{ groups['frr_node'] }}"
+      loop: "{{ groups['frr'] }}"

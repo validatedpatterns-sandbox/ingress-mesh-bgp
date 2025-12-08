@@ -50,6 +50,8 @@ ec2_vms:
     vpc: coreclient
     private_ip: 192.168.8.100
     type: t2.small
+    inventory_groups:
+      - frr
     extra_nics:
       - vpc: corewest
         ip: 192.168.12.200
@@ -64,12 +66,16 @@ ec2_vms:
     private_ip: 192.168.12.100
     type: t2.micro
     extra_nics: []
+    inventory_groups:
+      - frr
 
   easttor:
     vpc: coreeast
     private_ip: 192.168.16.100
     type: t2.micro
     extra_nics: []
+    inventory_groups:
+      - frr
 
 ec2_frrs:
   core:

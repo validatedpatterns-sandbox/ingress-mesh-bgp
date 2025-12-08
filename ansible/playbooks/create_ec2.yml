@@ -42,7 +42,7 @@
   ansible.builtin.add_host:
     name: "{{ instance.key }}"
     ansible_host: "{{ ec2_vms[instance.key].public_ip }}"
-    groups: ["{{ instance.value.vpc }}"]
+    groups: "{{ instance.value.vpc | list + instance.value.inventory_groups | default([]) }}"
     ansible_user: ec2-user
 
 - name: Set hostname {{ instance.key }}
