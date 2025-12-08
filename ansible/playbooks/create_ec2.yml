@@ -60,3 +60,9 @@
     loop_var: nic
     label: "{{ nic.vpc }} - {{ nic.ip }}"
     extended: true
+
+- name: Enforce rp_filter on all new nics
+  become: true
+  delegate_to: "{{ instance.key }}"
+  ansible.builtin.shell: |
+    for i in /proc/sys/net/ipv4/conf/*/rp_filter; do echo 0 > $i; done

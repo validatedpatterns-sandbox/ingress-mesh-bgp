@@ -67,7 +67,7 @@
       delegate_to: core
       ansible.builtin.shell: |
         set -e -o pipefail
-        nmcli c modify "Wired connection 2" ipv4.never-default yes
+        nmcli c modify "Wired connection 1" ipv4.never-default yes
         nmcli c up "Wired connection 1"
         nmcli c modify "Wired connection 2" ipv4.never-default yes
         nmcli c up "Wired connection 2"
