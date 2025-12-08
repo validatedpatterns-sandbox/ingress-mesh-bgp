@@ -12,6 +12,7 @@
   - One static route towards the core
 - Reorganize the charts (applications/components)
 - Make sure we have externalTrafficPolicy: local on all the service objects
+- Make cleanup work even when the west/east clusters have been deleted
 
 Nice to have:
 - Figure out a solid way to always use the same addresses for the TORs workers NIC
