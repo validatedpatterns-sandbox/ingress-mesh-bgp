@@ -62,6 +62,16 @@
         loop_var: ocp
         label: "{{ ocp.name }}"
 
+    - name: Drop default routes from core
+      become: true
+      delegate_to: core
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        nmcli c modify "Wired connection 2" ipv4.never-default yes
+        nmcli c up "Wired connection 1"
+        nmcli c modify "Wired connection 2" ipv4.never-default yes
+        nmcli c up "Wired connection 2"
+
     - name: Configure FRR on core, torwest and torweast
       ansible.builtin.include_tasks: aws_ec2_frr.yml
       loop: "{{ ec2_frrs | dict2items }}"
