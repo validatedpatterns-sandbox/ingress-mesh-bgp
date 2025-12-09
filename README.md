@@ -54,3 +54,7 @@ The `make bgp-routing` command generates a `/tmp/launch_tmux.sh` command which c
 a tmux with an ssh session on each EC2 vm.
 
 Hop on the client vm tab and run `curl http://192.168.155.151/hello`
+
+## Destroy setup
+
+First run `make bgp-routing-cleanup` and *then* destroy the two clusters
