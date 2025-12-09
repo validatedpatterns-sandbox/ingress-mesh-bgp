@@ -107,8 +107,7 @@ ec2_frrs:
         local_ip: 192.168.12.100
         asn: 64666
       # We will extend this list dynamically with the ocp workers ips-asn
-    fixed_advertisements:
-      - "{{ metallb_address_pool }}"
+    fixed_advertisements: []
 
   easttor:
     asn: 64002
@@ -120,5 +119,4 @@ ec2_frrs:
         local_ip: 192.168.16.100
         asn: 64666
       # We will extend this list dynamically with the ocp workers ips-asn
-    fixed_advertisements:
-      - "{{ metallb_address_pool }}"
+    fixed_advertisements: []
