@@ -3,263 +3,123 @@
   hosts: localhost
   gather_facts: false
   become: false
-  vars:
-    wait_for_ssh_timeout: 600
   vars_files:
     # Use this to override stuff that won't be committed to git
     - ../overrides.yml
 
   tasks:
-    - name: Checks
+    - name: Checks for ocp clusters and sets aws_region, aws_az and aws_arn_userid
       ansible.builtin.include_tasks: check_task.yml
 
-    - name: Get ami image
-      ansible.builtin.shell: |
-        aws --profile {{ aws_profile }} ec2 describe-images \
-        --owners {{ aws_ami_owner }} \
-        --filters "Name=name,Values={{ aws_ami_name }}*" "Name=state,Values=available" "Name=architecture,Values={{ aws_ami_arch }}" \
-        --region {{ aws_region }} \
-        --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
-        --output text
-      register: test_client_ec2_ami_image_id_raw
-      changed_when: false
-
-    - name: Set ami image fact
-      ansible.builtin.set_fact:
-        test_client_ec2_ami_image_id: "{{ test_client_ec2_ami_image_id_raw.stdout }}"
-
-    - name: Print ami image use
-      ansible.builtin.debug:
-        msg: "Using AMI image: {{ test_client_ec2_ami_image_id }}"
+    - name: Fetch AMI id and set ec2_ami_image_id
+      ansible.builtin.include_tasks: get_ami.yml
 
     - name: Create key pair to access ec2 with ssh
       amazon.aws.ec2_key:
         profile: "{{ aws_profile }}"
         region: "{{ aws_region }}"
-        name: "{{ test_client_ec2_ssh_key_name }}"
+        name: "{{ ec2_ssh_key_name }}"
         key_material: "{{ ssh_pubkey }}"
 
-    - name: Configure networking for hub and spoke clusters
+    - name: Set tags to use in every object
+      ansible.builtin.set_fact:
+        current_tags: "{{ aws_default_tags | combine({ 'washere': aws_arn_userid }) }}"
+
+    - name: Create all the VPCs, subnets, igw and rtbls
+      ansible.builtin.include_tasks: create_vpc.yml
+      loop: "{{ ec2_vpcs | dict2items }}"
+      loop_control:
+        loop_var: instance
+        label: "{{ instance.key }}"
+
+    - name: Print VPCs
+      ansible.builtin.debug:
+        msg: "{{ ec2_vpcs }}"
+
+    - name: Create all the EC2 instances
+      ansible.builtin.include_tasks: create_ec2.yml
+      loop: "{{ ec2_vms | dict2items }}"
+      loop_control:
+        loop_var: instance
+        label: "{{ instance.key }}"
+
+    - name: Configure networking for west and east clusters
       ansible.builtin.include_tasks: network_task.yml
       loop:
-        - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}" }
-        - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}" }
+        - { 
+            name: "west",
+            config: "{{ WESTCONFIG }}",
+            cluster_name: "{{ west_cluster_name }}",
+            tor_vm: "westtor",
+            vpc: "corewest"
+          } 
+        - { 
+            name: "east",
+            config: "{{ EASTCONFIG }}",
+            cluster_name: "{{ east_cluster_name }}",
+            tor_vm: "easttor",
+            vpc: "coreeast"
+          }
       loop_control:
         loop_var: ocp
+        label: "{{ ocp.name }}"
 
-    - name: Start an ec2 instance (test-client)
-      amazon.aws.ec2_instance:
-        profile: "{{ aws_profile }}"
-        region: "{{ aws_region }}"
-        name: "test-client-{{ hub_cluster_name }}"
-        state: started
-        wait: true
-        vpc_subnet_id: "{{ hub_public_subnet_id }}"
-        instance_type: "{{ aws_ec2_instance_type }}"
-        key_name: "{{ test_client_ec2_ssh_key_name }}"
-        source_dest_check: false
-        security_groups: "test-client-{{ hub_cluster_name }}-security-group"
-        image_id: "{{ test_client_ec2_ami_image_id }}"
-        network:
-          assign_public_ip: true
-        user_data: "{{ lookup('template', '../templates/cloud_init_userdata.j2') | b64encode }}"
-      register: client_instance_info
-
-    - name: Set instance facts
-      ansible.builtin.set_fact:
-        client_public_ip: "{{ client_instance_info.instances[0].public_ip_address }}"
-        client_private_ip: "{{ client_instance_info.instances[0].private_ip_address }}"
-        metallb_private_ip: "{{ client_instance_info.instances[0].private_ip_address }}"
-        client_instance_id: "{{ client_instance_info.instances[0].instance_id }}"
-
-    - name: Show instance details
-      ansible.builtin.debug:
-        msg:
-          public_ip: "{{ client_public_ip }}"
-          private_ip: "{{ client_private_ip }}"
-          instance_id: "{{ client_instance_id }}"
-          spoke_public_subnet_id: "{{ spoke_public_subnet_id }}"
-
-    - name: Set dns facts (1)
-      ansible.builtin.set_fact:
-        record_name: "bgp_{{ aws_arn_userid }}"
-
-    - name: Set dns facts (2)
-      ansible.builtin.set_fact:
-        fqdn: "{{ record_name }}.{{ hosted_zone | regex_replace('\n$','') }}"
-        fqdn_nodot: "{{ record_name }}.{{ hosted_zone | regex_replace('\n$','') | regex_replace('\\.$','') }}"
-
-    - name: Create/Update A record
-      amazon.aws.route53:
-        profile: "{{ aws_profile }}"
-        zone: "{{ hosted_zone }}"
-        record: "{{ fqdn }}"
-        type: A
-        ttl: 60
-        value: "{{ client_public_ip }}"
-        overwrite: true
-        state: present
-      register: r53
-
-    - name: Show DNS
-      ansible.builtin.debug:
-        msg:
-          fqdn: "{{ fqdn }}"
-          r53: "{{ r53 }}"
-
-    - name: Wait for SSH to be available
-      ansible.builtin.wait_for:
-        host: "{{ client_public_ip }}"
-        port: 22
-        timeout: "{{ wait_for_ssh_timeout }}"
-        state: started
-
-    - name: Add new host to in-memory inventory
-      ansible.builtin.add_host:
-        name: "{{ fqdn_nodot }}"
-        ansible_host: "{{ client_public_ip }}"
-        groups: ["client_node"]
-        ansible_user: ec2-user
-
-    - name: Get ENI in spoke's vpc subnet
-      amazon.aws.ec2_eni_info:
-        profile: "{{ aws_profile }}"
-        region: "{{ aws_region }}"
-        filters:
-          attachment.instance-id: "{{ client_instance_info.instance_ids[0] }}"
-          subnet-id: "{{ spoke_public_subnet_id }}"
-      register: ec2_eni_info_raw
-
-    - name: Create ENI in spoke's vpc subnet if not exists
-      amazon.aws.ec2_eni:
-        profile: "{{ aws_profile }}"
-        region: "{{ aws_region }}"
-        subnet_id: "{{ spoke_public_subnet_id }}" # ⬅️ Subnet in VPC B, but same AZ
-        security_groups: "test-client-{{ spoke_cluster_name }}-security-group"
-        instance_id: "{{ client_instance_info.instance_ids[0] }}"
-        device_index: 1  # ⬅️ Must be 1 or greater for a secondary NIC
-        attached: true
-        tags:
-          Name: "{{ spoke_cluster_name }}-client-vpc-nic"
-      register: eni_created
-      when: ec2_eni_info_raw['network_interfaces'] | length == 0
-
-    - name: Debug eni info
-      ansible.builtin.debug:
-        msg: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
-
-    # Modify the interface to enable the delete_on_terminaton flag
-    - name: Make sure we delete the ENI when we remove the ec2 VM
-      amazon.aws.ec2_eni:
-        profile: "{{ aws_profile }}"
-        region: "{{ aws_region }}"
-        eni_id: "{{ eni_id }}"
-        source_dest_check: false
-        delete_on_termination: true
-      vars:
-        eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
-
-    - name: Fetch client ec2
-      amazon.aws.ec2_instance_info:
-        region: "{{ aws_region }}"
-        instance_ids:
-          - "{{ client_instance_id }}"
-      register: ec2_info
-
-    - name: Find network interfaces for each subnet
-      ansible.builtin.set_fact:
-        spoke_eni_list: "{{ ec2_info.instances[0].network_interfaces | selectattr('subnet_id', 'equalto', spoke_public_subnet_id) | list }}"
-        hub_eni_list: "{{ ec2_info.instances[0].network_interfaces | selectattr('subnet_id', 'equalto', hub_public_subnet_id) | list }}"
-
-    - name: Validate network interfaces were found
-      ansible.builtin.assert:
-        that:
-          - spoke_eni_list | length > 0
-          - hub_eni_list | length > 0
-        fail_msg: |
-          Failed to find network interfaces:
-          - Spoke subnet {{ spoke_public_subnet_id }}: {{ spoke_eni_list | length }} interface(s) found
-          - Hub subnet {{ hub_public_subnet_id }}: {{ hub_eni_list | length }} interface(s) found
-
-    - name: Extract private IPs from network interfaces
-      ansible.builtin.set_fact:
-        client_spoke_private_ip: "{{ spoke_eni_list[0].private_ip_addresses[0].private_ip_address }}"
-        client_hub_private_ip: "{{ hub_eni_list[0].private_ip_addresses[0].private_ip_address }}"
-
-    - name: Create aws route server infrastructure
-      ansible.builtin.include_tasks: aws_route_server.yml
-      loop:
-        - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}" }
-        - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}" }
-      loop_control:
-        loop_var: ocp
-      when: aws_route_server
-
-    - name: Create aws frr ec2 infrastructure
-      ansible.builtin.include_tasks: aws_ec2_frr.yml
-      loop:
-        - { name: "hub", config: "{{ HUBCONFIG }}", cluster_name: "{{ hub_cluster_name }}", frr_client_leg_ip: "{{ client_hub_private_ip }}" }
-        - { name: "spoke", config: "{{ SPOKECONFIG }}", cluster_name: "{{ spoke_cluster_name }}", frr_client_leg_ip: "{{ client_spoke_private_ip }}" }
-      loop_control:
-        loop_var: ocp
-      when: aws_route_server is false
-
-    - name: Print FRR Private IPs
-      ansible.builtin.debug:
-        msg: "Hub IP: {{ hub_frr_private_ip }} - Spoke IP: {{ spoke_frr_private_ip }}"
-      when: aws_route_server is false
-
-    - name: Configure frr on client {{ fqdn_nodot }}
+    - name: Drop default routes from core
       become: true
-      delegate_to: "{{ fqdn_nodot }}"
-      block:
-        - name: Set hostname on {{ fqdn }}
-          ansible.builtin.hostname:
-            name: "test-client-{{ hub_cluster_name }}"
-            use: systemd
+      delegate_to: core
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        nmcli c modify "Wired connection 1" ipv4.never-default yes
+        nmcli c up "Wired connection 1"
+        nmcli c modify "Wired connection 2" ipv4.never-default yes
+        nmcli c up "Wired connection 2"
 
-        - name: Ensure packages are installed on client {{ fqdn_nodot }}
-          ansible.builtin.dnf:
-            name:
-              - frr
-            state: present
-            update_cache: true
-        - name: Create frr config on client {{ fqdn_nodot }}
-          ansible.builtin.template:
-            src: ../templates/frr.conf.j2
-            dest: /etc/frr/frr.conf
-            mode: '0644'
-          vars:
-            asn: "{{ metallb_client_side_asn }}"
-            bgp_neighbors:
-              tor:
-                - "{{ hub_frr_private_ip }}"
-                - "{{ spoke_frr_private_ip }}"
-            bfd_localaddresses:
-              tor:
-                - "{{ client_hub_private_ip }}"
-                - "{{ client_spoke_private_ip }}"
-            peer_asns:
-              tor: "{{ metallb_aws_side_asn }}"
-            is_tor: false
+    - name: Get ENI in core in the coreclient vpc/subnet
+      amazon.aws.ec2_eni_info:
+        filters:
+          attachment.instance-id: "{{ ec2_vms['core']['instance_id'] }}"
+          subnet-id: "{{ ec2_vpcs['coreclient']['subnet_id'] }}"
+        profile: "{{ aws_profile }}"
+        region: "{{ aws_region }}"
+      register: core_main_eni_raw
 
-        - name: Create frr daemons config on client {{ fqdn_nodot }}
-          ansible.builtin.template:
-            src: ../templates/daemons.j2
-            dest: /etc/frr/daemons
-            mode: '0644'
+    - name: On the coreclient routing table add a route for the metallb network to the core's main nic
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ ocp2_vpcs['coreclient']['vpc_id'] }}"
+        route_table_id: "{{ rtb_id }}"
+        lookup: id
+        purge_routes: false
+        routes:
+          - dest: "{{ metallb_address_pool }}"
+            network_interface_id: "{{ core_client_eni_id }}"
+        profile: "{{ aws_profile }}"
+        region: "{{ aws_region }}"
+      vars:
+        rtb_id: "{{ ec2_vpcs['core']['route_table_id'] }}"
+        core_client_eni_id: "{{ core_main_eni_raw['network_interfaces'][0]['id'] }}"
 
-        - name: Create vtysh config on client {{ fqdn_nodot }}
-          ansible.builtin.template:
-            src: ../templates/vtysh.conf.j2
-            dest: /etc/frr/vtysh.conf
-            mode: '0644'
+    - name: Configure FRR on core, torwest and torweast
+      ansible.builtin.include_tasks: aws_ec2_frr.yml
+      loop: "{{ ec2_frrs | dict2items }}"
+      loop_control:
+        loop_var: frr
+        label: "{{ frr.key }}"
 
-        - name: "Enable and start the frr Service"
-          ansible.builtin.service:
-            name: frr
-            enabled: true
-            state: restarted
+    - name: Print EC2 VMs
+      ansible.builtin.debug:
+        msg: "{{ ec2_vms }}"
+
+    - name: Print TORs enX1 IPs
+      ansible.builtin.debug:
+        msg:
+          west_ip: "{{ west_enx1_ip }}"
+          east_ip: "{{ east_enx1_ip }}"
+
+    - name: Generate tmux shell template
+      ansible.builtin.template:
+        src: ../templates/launch_tmux.sh.j2
+        dest: "/tmp/launch_tmux.sh"
+        mode: '0755'
 
   handlers:
     - name: Restart frr on frr nodes
@@ -268,4 +128,4 @@
         state: restarted
       delegate_to: "{{ item }}"
       become: true
-      loop: "{{ groups['frr_node'] }}"
+      loop: "{{ groups['frr'] }}"

@@ -3,26 +3,26 @@
   hosts: localhost
   connection: local
   pre_tasks:
-    - name: Set HUBCONFIG and SPOKECONFIG facts from env variables
+    - name: Set WESTCONFIG and EASTCONFIG facts from env variables
       ansible.builtin.set_fact:
-        HUBCONFIG: "{{ lookup('env', 'HUBCONFIG') }}"
-        SPOKECONFIG: "{{ lookup('env', 'SPOKECONFIG') }}"
+        WESTCONFIG: "{{ lookup('env', 'WESTCONFIG') }}"
+        EASTCONFIG: "{{ lookup('env', 'EASTCONFIG') }}"
 
-    - name: Check for correct HUBCONFIG variable
+    - name: Check for correct WESTCONFIG variable
       ansible.builtin.fail:
-        msg: "HUBCONFIG variable needs to be set and pointing to the HUB kubeconfig file"
+        msg: "WESTCONFIG variable needs to be set and pointing to the HUB kubeconfig file"
       when:
-        HUBCONFIG is not defined or HUBCONFIG | length == 0
+        WESTCONFIG is not defined or WESTCONFIG | length == 0
 
-    - name: Check for correct SPOKECONFIG env variable
+    - name: Check for correct EASTCONFIG env variable
       ansible.builtin.fail:
-        msg: "SPOKECONFIG variable needs to be set and pointing to the REGION kubeconfig file"
+        msg: "EASTCONFIG variable needs to be set and pointing to the REGION kubeconfig file"
       when:
-        SPOKECONFIG is not defined or SPOKECONFIG | length == 0
+        EASTCONFIG is not defined or EASTCONFIG | length == 0
 
     - name: Print the hub and regional kubeconfigs
       ansible.builtin.debug:
-        msg: "HUBCONFIG: {{ HUBCONFIG }} - SPOKECONFIG: {{ SPOKECONFIG }}"
+        msg: "WESTCONFIG: {{ WESTCONFIG }} - EASTCONFIG: {{ EASTCONFIG }}"
 
   roles:
     - acm_import

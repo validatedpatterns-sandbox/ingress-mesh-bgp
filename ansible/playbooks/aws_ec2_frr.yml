@@ -1,151 +1,26 @@
-- name: Get worker node ip list for "{{ ocp.name }}"
-  ansible.builtin.shell: |
-    set -e -o pipefail
-    oc describe nodes -l node-role.kubernetes.io/worker | grep InternalIP: | awk '{ print $2 }'
-  environment:
-    KUBECONFIG: "{{ ocp.config }}"
-  register: worker_nodes
-
-- name: Gather security group info for workers for "{{ ocp.name }}"
-  amazon.aws.ec2_security_group_info:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-    filters:
-      "tag:sigs.k8s.io/cluster-api-provider-aws/role": "node"
-      "tag:Name": "{{ ocp.cluster_name }}-*"
-  register: ec2_security_group_info
-
-- name: Debug for "{{ ocp.name }} - {{ ocp.cluster_name }}"
-  ansible.builtin.debug:
-    msg: "ec2_security_group_info: {{ ec2_security_group_info }}"
-
-- name: Set vpc and sg id for "{{ ocp.name }}"
-  ansible.builtin.set_fact:
-    sg_vpc_id: "{{ ec2_security_group_info.security_groups[0].vpc_id }}"
-    sg_group_id: "{{ ec2_security_group_info.security_groups[0].group_id }}"
-    sg_group_name: "{{ ec2_security_group_info.security_groups[0].group_name }}"
-    sg_worker_description: "{{ ec2_security_group_info.security_groups[0].description }}"
-
-- name: Gather vpc subnet info for workers for "{{ ocp.name }}"
-  amazon.aws.ec2_vpc_subnet_info:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-    filters:
-      vpc-id: "{{ sg_vpc_id }}"
-  register: ec2_vpc_subnet_info
-
-- name: Set public subnet id for "{{ ocp.name }}"
-  ansible.builtin.set_fact: # only add the public subnet, and there will be only exactly one
-    public_subnet_id: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', true) | selectattr('availability_zone', '==', aws_az) | map(attribute='subnet_id') | first }}"
-  vars:
-    aws_az: "{{ aws_region }}a"
-
-- name: Set full var public subnet id for "{{ ocp.name }}"
-  ansible.builtin.set_fact: # only add the public subnet, and there will be only exactly one
-    "{{ ocp.name }}_public_subnet_id": "{{ public_subnet_id }}"
-    "{{ ocp.name }}_vpc_id": "{{ sg_vpc_id }}"
-
-- name: Debug subnet for "{{ ocp.name }}"
-  ansible.builtin.debug:
-    msg: "public_subnet_id: {{ public_subnet_id }} - ec2_vpc_subnet_info: {{ ec2_vpc_subnet_info }}"
-
-- name: Start an ec2 instance (frr-{{ ocp.cluster_name }})
-  amazon.aws.ec2_instance:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-    name: "frr-ec2-{{ ocp.cluster_name }}"
-    state: started
-    wait: true
-    vpc_subnet_id: "{{ public_subnet_id }}"
-    instance_type: "{{ aws_ec2_instance_type }}"
-    key_name: "{{ test_client_ec2_ssh_key_name }}"
-    security_groups: "test-client-{{ ocp.cluster_name }}-security-group"
-    source_dest_check: false
-    image_id: "{{ test_client_ec2_ami_image_id }}"
-    network:
-      assign_public_ip: true
-    user_data: "{{ lookup('template', '../templates/cloud_init_userdata.j2') | b64encode }}"
-  register: frr_instance_info
-
-- name: Set instance facts
-  ansible.builtin.set_fact:
-    frr_public_ip: "{{ frr_instance_info.instances[0].public_ip_address }}"
-    frr_private_ip: "{{ frr_instance_info.instances[0].private_ip_address }}"
-    frr_instance_id: "{{ frr_instance_info.instances[0].instance_id }}"
-    "{{ ocp.name }}_frr_private_ip": "{{ frr_instance_info.instances[0].private_ip_address }}"
-
-- name: Show instance details
-  ansible.builtin.debug:
-    msg:
-      public_ip: "{{ frr_public_ip }}"
-      private_ip: "{{ frr_private_ip }}"
-      instance_id: "{{ frr_instance_id }}"
-
-- name: Wait for SSH to be available
-  ansible.builtin.wait_for:
-    host: "{{ frr_public_ip }}"
-    port: 22
-    timeout: "{{ wait_for_ssh_timeout }}"
-    state: started
-
-- name: Add new host to in-memory inventory
-  ansible.builtin.add_host:
-    name: "frr-ec2-{{ ocp.cluster_name }}"
-    ansible_host: "{{ frr_public_ip }}"
-    groups: ["frr_node"]
-    ansible_user: ec2-user
-
-- name: Configure frr on frr-ec2-{{ ocp.cluster_name }}
+- name: Configure frr on {{ frr.key }}
   become: true
-  delegate_to: "frr-ec2-{{ ocp.cluster_name }}"
+  delegate_to: "{{ frr.key }}"
   block:
-  - name: Set hostname on frr-ec2-{{ ocp.cluster_name }}
-    ansible.builtin.hostname:
-      name: "frr-ec2-{{ ocp.cluster_name }}"
-      use: systemd
-
-  - name: Ensure packages are installed on frr-ec2-{{ ocp.cluster_name }}
-    ansible.builtin.dnf:
-      name:
-      - frr
-      state: present
-      update_cache: yes
-
-  - name: Create frr config on frr-ec2-{{ ocp.cluster_name }}
+  - name: Create frr config on {{ frr.key }}
     ansible.builtin.template:
       src: ../templates/frr.conf.j2
       dest: /etc/frr/frr.conf
-    vars:
-      asn: "{{ metallb_aws_side_asn }}"
-      bgp_neighbors:
-        metallb: "{{ worker_nodes.stdout_lines }}"
-        clientfrr: "{{ [ ocp.frr_client_leg_ip ] }}"
-      peer_asns:
-        metallb: "{{ metallb_openshift_side_asn }}"
-        clientfrr: "{{ metallb_client_side_asn }}"
-      bfd_localaddresses:
-        metallb:
-          - "{{ frr_private_ip }}"
-          - "{{ frr_private_ip }}"
-          - "{{ frr_private_ip }}"
-        clientfrr:
-          - "{{ frr_private_ip }}"
-      is_tor: true
     notify: Restart frr on frr nodes
 
-  - name: Create frr daemons config on frr-ec2-{{ ocp.cluster_name }}
+  - name: Create frr daemons config on {{ frr.key }}
     ansible.builtin.template:
       src: ../templates/daemons.j2
       dest: /etc/frr/daemons
     notify: Restart frr on frr nodes
 
-  - name: Create vtysh config on frr-ec2-{{ ocp.cluster_name }}
+  - name: Create vtysh config on {{ frr.key }}
     ansible.builtin.template:
       src: ../templates/vtysh.conf.j2
       dest: /etc/frr/vtysh.conf
     notify: Restart frr on frr nodes
 
-  - name: Create vtysh config on frr-ec2-{{ ocp.cluster_name }}
+  - name: Create vtysh config on {{ frr.key }}
     ansible.builtin.template:
       src: ../templates/vtysh.conf.j2
       dest: /etc/frr/vtysh.conf
@@ -158,37 +33,37 @@
       state: started
     notify: Restart frr on frr nodes
 
-- name: Gather the ec2 instance details (worker node, same AZ/subnet as ec2 client)
-  amazon.aws.ec2_instance_info:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-    filters:
-      "tag:Name": "{{ ocp.cluster_name }}*-worker-*"
-      instance-state-name: ["pending","running"]
-      availability-zone: "{{ aws_az }}"
-  register: ec2_node_info
-  vars:
-    aws_az: "{{ aws_region }}a"
-
-- name: Get route table for client ec2
-  amazon.aws.ec2_vpc_route_table_info:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-    filters:
-      association.subnet-id: "{{ public_subnet_id }}"
-  register: get_route_tables_raw
-
-- name: Set up route table for client ec2 to ocp woker node instance
-  amazon.aws.ec2_vpc_route_table:
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-    vpc_id: "{{ sg_vpc_id }}"
-    route_table_id: "{{ rtb_id  }}"
-    lookup: id
-    purge_routes: false
-    routes:
-      - dest: "{{ metallb_address_pool }}"
-        instance_id: "{{ ec2_id }}"
-  vars:
-    rtb_id: "{{ get_route_tables_raw['route_tables'] | map(attribute='route_table_id') | first }}"
-    ec2_id: "{{ ec2_node_info['instances'] | map(attribute='instance_id') | first }}"
+# - name: Gather the ec2 instance details (worker node, same AZ/subnet as ec2 client)
+#   amazon.aws.ec2_instance_info:
+#     profile: "{{ aws_profile }}"
+#     region: "{{ aws_region }}"
+#     filters:
+#       "tag:Name": "{{ ocp.cluster_name }}*-worker-*"
+#       instance-state-name: ["pending","running"]
+#       availability-zone: "{{ aws_az }}"
+#   register: ec2_node_info
+#   vars:
+#     aws_az: "{{ aws_region }}a"
+#
+# - name: Get route table for client ec2
+#   amazon.aws.ec2_vpc_route_table_info:
+#     profile: "{{ aws_profile }}"
+#     region: "{{ aws_region }}"
+#     filters:
+#       association.subnet-id: "{{ public_subnet_id }}"
+#   register: get_route_tables_raw
+#
+# - name: Set up route table for client ec2 to ocp woker node instance
+#   amazon.aws.ec2_vpc_route_table:
+#     profile: "{{ aws_profile }}"
+#     region: "{{ aws_region }}"
+#     vpc_id: "{{ sg_vpc_id }}"
+#     route_table_id: "{{ rtb_id  }}"
+#     lookup: id
+#     purge_routes: false
+#     routes:
+#       - dest: "{{ metallb_address_pool }}"
+#         instance_id: "{{ ec2_id }}"
+#   vars:
+#     rtb_id: "{{ get_route_tables_raw['route_tables'] | map(attribute='route_table_id') | first }}"
+#     ec2_id: "{{ ec2_node_info['instances'] | map(attribute='instance_id') | first }}"

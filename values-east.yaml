@@ -1,10 +1,5 @@
-global:
-  options:
-    useCSV: false
-    syncPolicy: Automatic
-    installPlanApproval: Automatic
 clusterGroup:
-  name: group-one
+  name: east
   isHubCluster: false
   namespaces:
     - golang-external-secrets
@@ -48,6 +43,10 @@ clusterGroup:
       argoProject: east
       path: charts/all/metallb
       overrides:
+      - name: metallb.myASN
+        value: 65002
+      - name: metallb.peerASN
+        value: 64002
       - name: metallb.peerAddress
         value: 10.0.10.100
     rhsi:

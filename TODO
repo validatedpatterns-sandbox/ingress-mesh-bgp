@@ -1,3 +1,8 @@
 - When deploying ingress pattern you need to tweak route server ips (maybe we can do this dynamically?)
 - Add a test target in ansible that checks things from the client vm
-- Add a couple of diagrams and a small readme
+- Have the ansible targets use the utility container
+- Reorganize the charts (applications/components)
+- Make sure we have externalTrafficPolicy: local on all the service objects
+  (not sure this works now that we point the metallb network to a single random
+  worker in the route table)
+- Make cleanup work even when the west/east clusters have been deleted

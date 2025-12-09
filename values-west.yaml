@@ -1,5 +1,5 @@
 clusterGroup:
-  name: hub
+  name: west
   isHubCluster: true
   namespaces:
     - open-cluster-management
@@ -64,6 +64,10 @@ clusterGroup:
       argoProject: hub
       path: charts/all/metallb
       overrides:
+      - name: metallb.myASN
+        value: 65001
+      - name: metallb.peerASN
+        value: 64001
       - name: metallb.peerAddress
         value: 10.0.101.167
     rhsi:
@@ -74,11 +78,11 @@ clusterGroup:
   imperative:
     jobs: []
   managedClusterGroups:
-    exampleRegion:
-      name: group-one
+    westRegion:
+      name: east
       acmlabels:
         - name: clusterGroup
-          value: group-one
+          value: east
       helmOverrides:
         - name: clusterGroup.isHubCluster
           value: false

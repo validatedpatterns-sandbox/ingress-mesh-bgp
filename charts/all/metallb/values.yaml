@@ -5,7 +5,7 @@
 
 metallb:
   myASN: 65001
-  peerASN: 64512
+  peerASN: 64001
   peerAddress: 10.0.0.0
   ebgpMultiHop: true
   bfd:

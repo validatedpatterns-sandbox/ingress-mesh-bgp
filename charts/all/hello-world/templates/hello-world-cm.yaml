@@ -14,10 +14,13 @@ data:
         </head>
           <body>
             <h1>Hello World!</h1>
-            <br/>
+            <br>
             <h2>
-            Hub Cluster domain is '{{ .Values.global.hubClusterDomain }}' <br>
             Pod is running on Local Cluster Domain '{{ .Values.global.localClusterDomain }}' <br>
+            <br>
+            <br>
+            <br>
+            Hub Cluster domain is '{{ .Values.global.hubClusterDomain }}' <br>
             </h2>
           </body>
       </html>
