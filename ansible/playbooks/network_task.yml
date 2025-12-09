@@ -180,7 +180,7 @@
     msg: 
       ec2_eni_info_raw: "{{ ec2_eni_info_raw }}"
       eni_created: "{{ eni_created }}"
-      eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+      eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
 - name: Make sure we delete the ENI when we remove the ec2 VM
   amazon.aws.ec2_eni:
@@ -190,7 +190,9 @@
     profile: "{{ aws_profile }}"
     region: "{{ aws_region }}"
   vars:
-    eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+    eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+  retries: 4
+  delay: 10
 
 - name: Wait for enX1
   become: true
