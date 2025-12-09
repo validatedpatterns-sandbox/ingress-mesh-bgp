@@ -74,6 +74,30 @@
         nmcli c modify "Wired connection 2" ipv4.never-default yes
         nmcli c up "Wired connection 2"
 
+    - name: Get ENI in core in the coreclient vpc/subnet
+      amazon.aws.ec2_eni_info:
+        filters:
+          attachment.instance-id: "{{ ec2_vms['core']['instance_id'] }}"
+          subnet-id: "{{ ec2_vpcs['coreclient']['subnet_id'] }}"
+        profile: "{{ aws_profile }}"
+        region: "{{ aws_region }}"
+      register: core_main_eni_raw
+
+    - name: On the coreclient routing table add a route for the metallb network to the core's main nic
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ ocp2_vpcs['coreclient']['vpc_id'] }}"
+        route_table_id: "{{ rtb_id }}"
+        lookup: id
+        purge_routes: false
+        routes:
+          - dest: "{{ metallb_address_pool }}"
+            network_interface_id: "{{ core_client_eni_id }}"
+        profile: "{{ aws_profile }}"
+        region: "{{ aws_region }}"
+      vars:
+        rtb_id: "{{ ec2_vpcs['core']['route_table_id'] }}"
+        core_client_eni_id: "{{ core_main_eni_raw['network_interfaces'][0]['id'] }}"
+
     - name: Configure FRR on core, torwest and torweast
       ansible.builtin.include_tasks: aws_ec2_frr.yml
       loop: "{{ ec2_frrs | dict2items }}"

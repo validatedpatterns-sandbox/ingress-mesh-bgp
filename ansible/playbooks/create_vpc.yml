@@ -68,7 +68,7 @@
         ec2_vpcs | combine({
           instance.key: instance.value | combine({ 
             'vpc_id': vpc_result.vpc.id,
-            'rtbl_id': rtbl_result.route_table.id,
+            'route_table_id': rtbl_result.route_table.id,
             'subnet_id': subnet_result.subnet.id,
             'security_group_id': sg_result.group_id
           })
