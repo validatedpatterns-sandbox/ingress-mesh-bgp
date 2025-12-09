@@ -166,9 +166,12 @@
   register: eni_created
   when: ec2_eni_info_raw['network_interfaces'] | length == 0
 
-- name: Set additional ENI interface id
-  ansible.builtin.set_fact:
-    eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+- name: Debug additional ENI interface id
+  ansible.builtin.debug:
+    msg: 
+      ec2_eni_info_raw: "{{ ec2_eni_info_raw }}"
+      eni_created: "{{ eni_created }}"
+      eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
 - name: Make sure we delete the ENI when we remove the ec2 VM
   amazon.aws.ec2_eni:
@@ -177,6 +180,8 @@
     delete_on_termination: true
     profile: "{{ aws_profile }}"
     region: "{{ aws_region }}"
+  vars:
+    eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
 - name: Wait for enX1
   become: true
