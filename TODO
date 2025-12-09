@@ -1,18 +1,8 @@
 - When deploying ingress pattern you need to tweak route server ips (maybe we can do this dynamically?)
 - Add a test target in ansible that checks things from the client vm
-- Add a couple of diagrams and a small readme (fix current diagram)
 - Have the ansible targets use the utility container
-- Move naming to west/east
-- Fix metric on secondary nic on core/client
-- Split off client vm from the core
-  - Create third vpc
-  - Add third nic to the core pointing to the client
-  - Client will need a single nic and a public ip
-  - Bonus points for a reverse proxy on the client
-  - One static route towards the core
 - Reorganize the charts (applications/components)
 - Make sure we have externalTrafficPolicy: local on all the service objects
+  (not sure this works now that we point the metallb network to a single random
+  worker in the route table)
 - Make cleanup work even when the west/east clusters have been deleted
-
-Nice to have:
-- Figure out a solid way to always use the same addresses for the TORs workers NIC
