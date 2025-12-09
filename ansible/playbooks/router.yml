@@ -105,6 +105,12 @@
         loop_var: frr
         label: "{{ frr.key }}"
 
+    - name: Generate tmux shell template
+      ansible.builtin.template:
+        src: ../templates/launch_tmux.sh.j2
+        dest: "/tmp/launch_tmux.sh"
+        mode: '0755'
+
     - name: Print EC2 VMs
       ansible.builtin.debug:
         msg: "{{ ec2_vms }}"
@@ -112,14 +118,8 @@
     - name: Print TORs enX1 IPs
       ansible.builtin.debug:
         msg:
-          west_ip: "{{ west_enx1_ip }}"
-          east_ip: "{{ east_enx1_ip }}"
-
-    - name: Generate tmux shell template
-      ansible.builtin.template:
-        src: ../templates/launch_tmux.sh.j2
-        dest: "/tmp/launch_tmux.sh"
-        mode: '0755'
+          WEST ip: "{{ west_enx1_ip }}"
+          EAST ip: "{{ east_enx1_ip }}"
 
   handlers:
     - name: Restart frr on frr nodes
