@@ -94,7 +94,7 @@
     description: "{{ sg_worker_description }}"
     rules:
       - proto: all
-        cidr_ip: 10.0.0.0/8 # TODO: get this from the vpc
+        cidr_ip: "{{ target_cidr }}"
         rule_desc: All port from vpc
       - proto: all
         cidr_ip: 192.168.0.0/16 
@@ -136,7 +136,7 @@
       cidr_ip: 192.168.0.0/16
       rule_desc: All traffic from client core and tors
     - proto: all
-      cidr_ip: 10.0.0.0/8 # TODO: get this from the vpc
+      cidr_ip: "{{ target_cidr }}"
       rule_desc: All port from vpc
     - proto: tcp
       from_port: 22
