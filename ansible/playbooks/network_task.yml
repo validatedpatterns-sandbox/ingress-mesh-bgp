@@ -37,10 +37,19 @@
 
 - name: Get worker node ip list for "{{ ocp.name }}"
   ansible.builtin.shell: |
+    set -e -o pipefail
     oc describe nodes -l node-role.kubernetes.io/worker | grep InternalIP: | awk '{ print $2 }'
   environment:
     KUBECONFIG: "{{ ocp.config }}"
   register: worker_nodes
+
+- name: Get master node ip list for "{{ ocp.name }}"
+  ansible.builtin.shell: |
+    set -e -o pipefail
+    oc describe nodes -l node-role.kubernetes.io/master | grep InternalIP: | awk '{ print $2 }'
+  environment:
+    KUBECONFIG: "{{ ocp.config }}"
+  register: master_nodes
 
 - name: Gather security group info for workers for "{{ ocp.name }}"
   amazon.aws.ec2_security_group_info:
@@ -171,6 +180,7 @@
   ansible.builtin.assert:
     that:
       - "last_usable_address not in worker_nodes.stdout_lines"
+      - "last_usable_address not in master_nodes.stdout_lines"
     fail_msg: "{{ last_usable_address }} collided with {{ worker_nodes.stdout_lines }}"
 
 - name: Create ENI in TOR {{ ocp.tor_vm }} if it does not exists
