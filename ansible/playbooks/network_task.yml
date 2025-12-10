@@ -314,7 +314,7 @@
     region: "{{ aws_region }}"
   vars:
     rtb_id: "{{ get_priv_route_tables_raw['route_tables'] | map(attribute='route_table_id') | first }}"
-    tor_to_ocp_eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+    tor_to_ocp_eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
 # Next two tasks tweak the route table of the west/east vpc
 - name: Get route table for vpc {{ ocp.vpc }}
