@@ -85,7 +85,7 @@
 
     - name: On the coreclient routing table add a route for the metallb network to the core's main nic
       amazon.aws.ec2_vpc_route_table:
-        vpc_id: "{{ ocp2_vpcs['coreclient']['vpc_id'] }}"
+        vpc_id: "{{ ec2_vpcs['coreclient']['vpc_id'] }}"
         route_table_id: "{{ rtb_id }}"
         lookup: id
         purge_routes: false
@@ -95,7 +95,7 @@
         profile: "{{ aws_profile }}"
         region: "{{ aws_region }}"
       vars:
-        rtb_id: "{{ ec2_vpcs['core']['route_table_id'] }}"
+        rtb_id: "{{ ec2_vpcs['coreclient']['route_table_id'] }}"
         core_client_eni_id: "{{ core_main_eni_raw['network_interfaces'][0]['id'] }}"
 
     - name: Configure FRR on core, torwest and torweast
@@ -105,6 +105,12 @@
         loop_var: frr
         label: "{{ frr.key }}"
 
+    - name: Generate tmux shell template
+      ansible.builtin.template:
+        src: ../templates/launch_tmux.sh.j2
+        dest: "/tmp/launch_tmux.sh"
+        mode: '0755'
+
     - name: Print EC2 VMs
       ansible.builtin.debug:
         msg: "{{ ec2_vms }}"
@@ -112,14 +118,8 @@
     - name: Print TORs enX1 IPs
       ansible.builtin.debug:
         msg:
-          west_ip: "{{ west_enx1_ip }}"
-          east_ip: "{{ east_enx1_ip }}"
-
-    - name: Generate tmux shell template
-      ansible.builtin.template:
-        src: ../templates/launch_tmux.sh.j2
-        dest: "/tmp/launch_tmux.sh"
-        mode: '0755'
+          WEST ip: "{{ west_enx1_ip }}"
+          EAST ip: "{{ east_enx1_ip }}"
 
   handlers:
     - name: Restart frr on frr nodes

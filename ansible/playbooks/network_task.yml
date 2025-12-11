@@ -23,10 +23,6 @@
     kubeconfig: "{{ ocp.config }}"
   register: cluster_config_v1
 
-- debug:
-    msg:
-      config: "{{ cluster_config_v1 }}"
-
 - name: Extract MachineNetwork CIDR
   ansible.builtin.set_fact:
     target_cidr: >-
@@ -41,10 +37,19 @@
 
 - name: Get worker node ip list for "{{ ocp.name }}"
   ansible.builtin.shell: |
+    set -e -o pipefail
     oc describe nodes -l node-role.kubernetes.io/worker | grep InternalIP: | awk '{ print $2 }'
   environment:
     KUBECONFIG: "{{ ocp.config }}"
   register: worker_nodes
+
+- name: Get master node ip list for "{{ ocp.name }}"
+  ansible.builtin.shell: |
+    set -e -o pipefail
+    oc describe nodes -l node-role.kubernetes.io/master | grep InternalIP: | awk '{ print $2 }'
+  environment:
+    KUBECONFIG: "{{ ocp.config }}"
+  register: master_nodes
 
 - name: Gather security group info for workers for "{{ ocp.name }}"
   amazon.aws.ec2_security_group_info:
@@ -78,6 +83,7 @@
 - name: Set public subnet id for "{{ ocp.name }}"
   ansible.builtin.set_fact:
     public_subnet_id: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', true) | selectattr('availability_zone', '==', aws_az) | map(attribute='subnet_id') | first }}"
+    public_subnet_cidr: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', true) | selectattr('availability_zone', '==', aws_az) | map(attribute='cidr_block') | first }}"
 
 - name: Set private subnet id for "{{ ocp.name }}"
   vars:
@@ -162,11 +168,27 @@
     region: "{{ aws_region }}"
   register: ec2_eni_info_raw
 
+- name: Calculate last usable address in public_subnet
+  ansible.builtin.set_fact:
+    last_usable_address: "{{ public_subnet_cidr | ansible.utils.ipaddr('last_usable') }}"
+
+- name: Print last public address for subnet {{ public_subnet_id }}
+  ansible.builtin.debug:
+    msg: "{{ last_usable_address }}"
+
+- name: Assert that the ip won't clash with any worker ip
+  ansible.builtin.assert:
+    that:
+      - "last_usable_address not in worker_nodes.stdout_lines"
+      - "last_usable_address not in master_nodes.stdout_lines"
+    fail_msg: "{{ last_usable_address }} collided with {{ worker_nodes.stdout_lines }}"
+
 - name: Create ENI in TOR {{ ocp.tor_vm }} if it does not exists
   amazon.aws.ec2_eni:
     subnet_id: "{{ public_subnet_id }}"
     security_groups: "{{ sg_group_id }}"
     instance_id: "{{ ec2_vms[ocp.tor_vm].instance_id }}"
+    private_ip_address: "{{ last_usable_address }}"
     device_index: 1
     attached: true
     tags: "{{ current_tags | combine({ 'Name': ocp.tor_vm + '-' + ocp.name + '-nic' }) }}"
@@ -180,7 +202,7 @@
     msg: 
       ec2_eni_info_raw: "{{ ec2_eni_info_raw }}"
       eni_created: "{{ eni_created }}"
-      eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+      eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
 - name: Make sure we delete the ENI when we remove the ec2 VM
   amazon.aws.ec2_eni:
@@ -190,7 +212,9 @@
     profile: "{{ aws_profile }}"
     region: "{{ aws_region }}"
   vars:
-    eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+    eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+  retries: 4
+  delay: 10
 
 - name: Wait for enX1
   become: true
@@ -312,7 +336,7 @@
     region: "{{ aws_region }}"
   vars:
     rtb_id: "{{ get_priv_route_tables_raw['route_tables'] | map(attribute='route_table_id') | first }}"
-    tor_to_ocp_eni_id: "{{ eni_created.interface if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
+    tor_to_ocp_eni_id: "{{ eni_created.interface.id if (ec2_eni_info_raw['network_interfaces'] | length == 0) else ec2_eni_info_raw['network_interfaces'][0]['id'] }}"
 
 # Next two tasks tweak the route table of the west/east vpc
 - name: Get route table for vpc {{ ocp.vpc }}

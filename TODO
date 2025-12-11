@@ -1,4 +1,3 @@
-- When deploying ingress pattern you need to tweak route server ips (maybe we can do this dynamically?)
 - Add a test target in ansible that checks things from the client vm
 - Have the ansible targets use the utility container
 - Reorganize the charts (applications/components)
