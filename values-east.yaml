@@ -48,7 +48,7 @@ clusterGroup:
       - name: metallb.peerASN
         value: 64002
       - name: metallb.peerAddress
-        value: 10.1.127.254
+        value: 10.1.63.254
     rhsi:
       name: east
       namespace: east

@@ -69,7 +69,7 @@ clusterGroup:
       - name: metallb.peerASN
         value: 64001
       - name: metallb.peerAddress
-        value: 10.0.127.254
+        value: 10.0.63.254
     rhsi:
       name: west
       namespace: west
