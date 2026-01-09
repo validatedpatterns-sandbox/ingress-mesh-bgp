@@ -79,29 +79,16 @@
     region: "{{ aws_region }}"
   register: ec2_vpc_subnet_info
 
-# only add the public subnet, and there will be only exactly one
-- name: Set public subnet id for "{{ ocp.name }}"
-  ansible.builtin.set_fact:
-    public_subnet_id: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', true) | selectattr('availability_zone', '==', aws_az) | map(attribute='subnet_id') | first }}"
-    public_subnet_cidr: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', true) | selectattr('availability_zone', '==', aws_az) | map(attribute='cidr_block') | first }}"
-
+# only add the private subnet, and there will be only exactly one
 - name: Set private subnet id for "{{ ocp.name }}"
-  vars:
-    jmespath_query: "[?tags.\"sigs.k8s.io/cluster-api-provider-aws/role\"=='private'].subnet_id | [0]"
   ansible.builtin.set_fact:
-    private_subnet_id: "{{ ec2_vpc_subnet_info.subnets | json_query(jmespath_query) }}"
+    private_subnet_id: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', false) | selectattr('availability_zone', '==', aws_az) | map(attribute='subnet_id') | first }}"
+    private_subnet_cidr: "{{ ec2_vpc_subnet_info.subnets | selectattr('map_public_ip_on_launch', '==', false) | selectattr('availability_zone', '==', aws_az) | map(attribute='cidr_block') | first }}"
 
-- name: Print out the the private and public subnets for "{{ ocp.name }}
+- name: Print out the the private subnet for "{{ ocp.name }}
   ansible.builtin.debug:
     msg:
-      public_subnet_id: "{{ public_subnet_id }}"
       private_subnet_id: "{{ private_subnet_id }}"
-
-- name: Set full var public subnet id for "{{ ocp.name }}"
-  ansible.builtin.set_fact: # only add the public subnet, and there will be only exactly one
-    "{{ ocp.name }}_private_subnet_id": "{{ private_subnet_id }}"
-    "{{ ocp.name }}_public_subnet_id": "{{ public_subnet_id }}"
-    "{{ ocp.name }}_vpc_id": "{{ sg_vpc_id }}"
 
 - name: Open up worker node security groups
   amazon.aws.ec2_security_group:
@@ -163,16 +150,16 @@
   amazon.aws.ec2_eni_info:
     filters:
       attachment.instance-id: "{{ ec2_vms[ocp.tor_vm].instance_id }}"
-      subnet-id: "{{ public_subnet_id }}"
+      subnet-id: "{{ private_subnet_id }}"
     profile: "{{ aws_profile }}"
     region: "{{ aws_region }}"
   register: ec2_eni_info_raw
 
-- name: Calculate last usable address in public_subnet
+- name: Calculate last usable address in private_subnet
   ansible.builtin.set_fact:
-    last_usable_address: "{{ public_subnet_cidr | ansible.utils.ipaddr('last_usable') }}"
+    last_usable_address: "{{ private_subnet_cidr | ansible.utils.ipaddr('last_usable') }}"
 
-- name: Print last public address for subnet {{ public_subnet_id }}
+- name: Print last public address for subnet {{ private_subnet_id }}
   ansible.builtin.debug:
     msg: "{{ last_usable_address }}"
 
@@ -185,7 +172,7 @@
 
 - name: Create ENI in TOR {{ ocp.tor_vm }} if it does not exists
   amazon.aws.ec2_eni:
-    subnet_id: "{{ public_subnet_id }}"
+    subnet_id: "{{ private_subnet_id }}"
     security_groups: "{{ sg_group_id }}"
     instance_id: "{{ ec2_vms[ocp.tor_vm].instance_id }}"
     private_ip_address: "{{ last_usable_address }}"
@@ -276,40 +263,6 @@
 - name: Print updated ec2_frrs
   ansible.builtin.debug:
     msg: "{{ ec2_frrs }}"
-
-# Next three tasks tweak the route table towards the OCP workers in the public subnet
-- name: Gather the ec2 instance details (worker node, same AZ/subnet as ec2 client)
-  amazon.aws.ec2_instance_info:
-    filters:
-      "tag:Name": "{{ ocp.cluster_name }}*-worker-*"
-      instance-state-name: ["pending","running"]
-      availability-zone: "{{ aws_az }}"
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-  register: ec2_node_info
-
-- name: Get route table for client ec2
-  amazon.aws.ec2_vpc_route_table_info:
-    filters:
-      association.subnet-id: "{{ public_subnet_id }}"
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-  register: get_pub_route_tables_raw
-
-- name: Set up route table for client ec2 to ocp woker node instance
-  amazon.aws.ec2_vpc_route_table:
-    vpc_id: "{{ sg_vpc_id }}"
-    route_table_id: "{{ rtb_id }}"
-    lookup: id
-    purge_routes: false
-    routes:
-      - dest: "{{ metallb_address_pool }}"
-        instance_id: "{{ ec2_id }}"
-    profile: "{{ aws_profile }}"
-    region: "{{ aws_region }}"
-  vars:
-    rtb_id: "{{ get_pub_route_tables_raw['route_tables'] | map(attribute='route_table_id') | first }}"
-    ec2_id: "{{ ec2_node_info['instances'] | map(attribute='instance_id') | first }}"
 
 # Next three tasks tweak the route table towards the client network and the
 # core-west-east network in the ocp workers private subnet
