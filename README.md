@@ -54,6 +54,22 @@ a tmux with an SSH session on each EC2 vm.
 
 Hop on the client vm tab and run `curl http://192.168.155.151/hello`
 
+On the core switch vm you can verify that ECMP is configured:
+
+```sh
+[ec2-user@core ~]$ ip r
+default via 192.168.8.1 dev enX0 proto dhcp src 192.168.8.100 metric 100
+192.168.8.0/24 dev enX0 proto kernel scope link src 192.168.8.100 metric 100
+192.168.12.0/24 dev enX1 proto kernel scope link src 192.168.12.200 metric 101
+192.168.16.0/24 dev enX2 proto kernel scope link src 192.168.16.200 metric 101
+192.168.155.150 nhid 46 proto bgp metric 20
+        nexthop via 192.168.12.100 dev enX1 weight 1
+        nexthop via 192.168.16.100 dev enX2 weight 1
+192.168.155.151 nhid 46 proto bgp metric 20
+        nexthop via 192.168.12.100 dev enX1 weight 1
+        nexthop via 192.168.16.100 dev enX2 weight 1
+```
+
 ## Destroy setup
 
 First run `make bgp-routing-cleanup` and *then* destroy the two clusters
