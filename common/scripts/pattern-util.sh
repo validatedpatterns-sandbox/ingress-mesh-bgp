@@ -52,6 +52,14 @@ else
 
 fi
 
+# If kubeconfig is not set and westconfig is set then use westconfig
+# This is ingress-mesh-bgp specific and it makes it so that one only needs
+# to specify WESTCONFIG and EASTCONFIG for installation
+if [ -z "$KUBECONFIG" ] && [ -n "$WESTCONFIG" ]; then
+    export KUBECONFIG="$WESTCONFIG"
+    echo "KUBECONFIG was empty, now using WESTCONFIG: $KUBECONFIG"
+fi
+
 if [ -n "$KUBECONFIG" ]; then
     if [[ ! "${KUBECONFIG}" =~ ^$HOME* ]]; then
         echo "${KUBECONFIG} is pointing outside of the HOME folder, this will make it unavailable from the container."
